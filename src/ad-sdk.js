@@ -33,19 +33,19 @@ export default class AdSDK {
     const baseCfg = extend(
       {
         tenantId: cfg.tenantId || "14",
-        adId: cfg.adId || null,
-        streamId: cfg.streamId || null,
-        channelId: cfg.channelId || null,
-        positionId: cfg.positionId || null,
+        adId: cfg.adId || '',
+        streamId: cfg.streamId || '',
+        channelId: cfg.channelId || '',
+        positionId: cfg.positionId || '',
         platform: cfg.platform || "WEB",
         deviceType: cfg.deviceType || "DESKTOP",
-        transId: cfg.transId || null,
-        category: cfg.category || null,
-        keyword: cfg.keyword || null,
+        transId: cfg.transId || '',
+        category: cfg.category || '',
+        keyword: cfg.keyword || '',
         age: cfg.age || "0",
         gender: cfg.gender || "NONE",
-        token: cfg.token || null,
-        segments: cfg.segments || null,
+        token: cfg.token || '',
+        segments: cfg.segments || '',
         
         env: (cfg.env || "SANDBOX").toUpperCase(),
         type: (cfg.type || "INSTREAM").toUpperCase(),
@@ -53,8 +53,8 @@ export default class AdSDK {
         adSize: cfg.adSize,
         bannerType: cfg.bannerType,
         debug: !!cfg.debug,
-        width: cfg.width || null,
-        height: cfg.height || null,
+        width: cfg.width || '',
+        height: cfg.height || '',
         postMessage: true,
         postMessageChannel: "ad-sdk",
         targetOrigin: "*",
@@ -73,8 +73,6 @@ export default class AdSDK {
       + `&dt=${baseCfg.deviceType}`
       + `&d=${deviceId}`
       + `&si=${sign}`
-      + `&as=${baseCfg.adSize || "BANNER"}`
-      + `&bt=${baseCfg.bannerType || "DISPLAY"}`
       + `&ai=${baseCfg.adId || ""}`
       + `&ct=${baseCfg.contentType || ""}`
       + `&tt=${baseCfg.title || ""}`
@@ -160,9 +158,9 @@ export default class AdSDK {
     return {sign, salt, deviceId};
   }
   
-  async _fetchAd(token) {
+  async _fetchAd(token, bannerType, adSize) {
     const {fetchUrl, position, fetchTimeout, fetchRetries, fetchBackoff, debug} = this.cfg;
-    const url = `${fetchUrl}&position=${encodeURIComponent(position || "")}`; // note: fetchUrl already contains query params
+    const url = `${fetchUrl}&bt=${bannerType || ""}&as=${adSize || ""}`; // note: fetchUrl already contains query params
     let attempt = 0;
     
     const doFetch = async () => {
@@ -197,7 +195,7 @@ export default class AdSDK {
   }
   
   // Start — idempotent: duplicate calls ignored
-  async start(domId) {
+  async start(domId, bannerType, adSize) {
     // Always allow start: re-render fresh view
     if (!domId && this.cfg.type !== AdSDK.TYPE.WELCOME) throw new Error("AdSDK.start(domId) requires a DOM ID");
     
@@ -207,7 +205,7 @@ export default class AdSDK {
     } else {
       this.domEl = document.getElementById(domId);
       if (!this.domEl) throw new Error(`AdSDK: element #${domId} not found`);
-      if (this.cfg.bannerType === "DISPLAY") {
+      if (bannerType === "DISPLAY") {
         this.domEl.innerHTML = "";
       }
     }
@@ -234,7 +232,7 @@ export default class AdSDK {
     log(this.cfg.debug, `SDK start (force new render) token:${token}`);
     
     try {
-      const data = await this._fetchAd(token);
+      const data = await this._fetchAd(token, bannerType, adSize);
       // If token changed, fetched result was ignored by _fetchAd when stale and an error thrown
       this._adData = data;
       this._renderAd(data, token);
