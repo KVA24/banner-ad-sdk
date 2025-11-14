@@ -1,0 +1,26 @@
+{
+  "name": "ad-sdk",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/ad-sdk.min.js",
+  "scripts": {
+    "dev": "webpack --config webpack-dev.config.js --mode production",
+    "build": "webpack --config webpack.config.js --mode production",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.5",
+    "@babel/preset-env": "^7.28.5",
+    "babel-loader": "^10.0.0",
+    "javascript-obfuscator": "^4.1.1",
+    "rimraf": "^6.0.1",
+    "terser-webpack-plugin": "^5.3.14",
+    "webpack": "^5.102.1",
+    "webpack-cli": "^6.0.1",
+    "webpack-obfuscator": "^3.5.1"
+  },
+  "dependencies": {
+    "core-js": "3",
+    "crypto-js": "^4.2.0"
+  }
+}
