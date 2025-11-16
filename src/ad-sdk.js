@@ -228,16 +228,17 @@ export default class AdSDK {
     
     // New token for each start (replace old pending async work)
     const token = ++this._startToken;
-    this.emit("start");
+    this.emit("start", {domId});
     log(this.cfg.debug, `SDK start (force new render) token:${token}`);
     
     try {
+      this.emit("request", {domId});
       const data = await this._fetchAd(token, bannerType, adSize);
       // If token changed, fetched result was ignored by _fetchAd when stale and an error thrown
       this._adData = data;
-      this._renderAd(data, token);
+      this._renderAd(data, token, domId);
       this._track("impression", data.trackingEvents.impression);
-      this.emit("loaded", data);
+      this.emit("loaded", {domId, data});
     } catch (err) {
       if (err.message === 'stale_fetch') {
         // expected when a newer start/refresh happened — do nothing
@@ -245,8 +246,8 @@ export default class AdSDK {
         return;
       }
       log(this.cfg.debug, `Ad fetch error: ${err.message}`);
-      this._renderFallback();
-      this.emit("error", err);
+      this._renderFallback(domId);
+      this.emit("error", {domId, err});
     }
   }
   
@@ -309,7 +310,7 @@ export default class AdSDK {
       this.container = null;
     }
     
-    this.emit("destroy");
+    this.emit("destroy", {domId});
     log(this.cfg.debug, `SDK destroyed${domId ? ` for #${domId}` : ''} - view only (SDK state kept).`);
   }
   
@@ -335,12 +336,12 @@ export default class AdSDK {
     this._handlers = {};
     this._startToken = 0;
     
-    this.emit('destroy');
+    this.emit('destroyFull');
     log(this.cfg.debug, 'SDK fully reset (destroyHard).');
   }
   
-  _renderAd(ad, token) {
-    if (!ad || !ad.bannerSource) return this._renderFallback();
+  _renderAd(ad, token, domId) {
+    if (!ad || !ad.bannerSource) return this._renderFallback(domId);
     // If token outdated, skip render
     if (token !== this._startToken) {
       log(this.cfg.debug, `Render ignored (stale token:${token})`, 'warn');
@@ -349,14 +350,13 @@ export default class AdSDK {
     // ensure container still exists
     if (!this.container) {
       log(this.cfg.debug, 'Render aborted: container missing', 'warn');
-      return this._renderFallback();
+      return this._renderFallback(domId);
     }
     
     this.container.innerHTML = "";
     
     switch (ad.bannerSource) {
-      case "IMG":
-      case "URL": {
+      case "IMG": {
         const img = new Image();
         img.style.width = "100%";
         img.style.height = "100%";
@@ -367,7 +367,7 @@ export default class AdSDK {
           if (token !== this._startToken) return;
           if (!this.container) return;
           this.container.appendChild(img);
-          this.emit("rendered", ad);
+          this.emit("rendered", {domId, ad});
         };
         img.onerror = () => {
           console.error("[AdSDK] Image load error:", img.src);
@@ -377,7 +377,7 @@ export default class AdSDK {
             "error",
             new Error(`Image load error: ${img.src}`)
           )
-          this._renderFallback();
+          this._renderFallback(domId);
         };
         if (ad.clickThrough) {
           img.style.cursor = "pointer";
@@ -385,12 +385,14 @@ export default class AdSDK {
             if (token !== this._startToken) return;
             window.open(ad.clickThrough, "_blank");
             this._track("click", ad);
-            this.emit("click", ad);
+            this.emit("click", {domId, ad});
           });
         }
         break;
       }
       
+      case "URL":
+      case "HTML":
       case "SDK": {
         if (token !== this._startToken) return;
         const iframe = document.createElement("iframe");
@@ -400,7 +402,20 @@ export default class AdSDK {
         iframe.style.border = "none";
         iframe.sandbox = "allow-scripts allow-same-origin allow-popups";
         this.container.appendChild(iframe);
-        this.emit("rendered", ad);
+        iframe.onload = () => {
+          try {
+            const onIframeMessage = (e) => {
+              if (e.data?.imageLoaded) {
+                this.emit("rendered", {domId, ad});
+                window.removeEventListener("message", onIframeMessage);
+              }
+            };
+            
+            window.addEventListener("message", onIframeMessage);
+          } catch (err) {
+            this.emit("rendered", {domId, ad});
+          }
+        };
         break;
       }
       
@@ -429,14 +444,14 @@ export default class AdSDK {
           .catch((err) => {
             console.error("[AdSDK] VAST render error:", err);
             if (token !== this._startToken) return;
-            this._renderFallback();
+            this._renderFallback(domId);
             this.emit("error", err);
           });
         break;
       }
       
       default:
-        this._renderFallback();
+        this._renderFallback(domId);
     }
   }
   
@@ -613,13 +628,13 @@ export default class AdSDK {
     });
   }
   
-  _renderFallback() {
+  _renderFallback(domId) {
     if (!this.container) return;
     this.container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;background:#eee;width:100%;height:100%;color:#999;">
         Ad unavailable
       </div>`;
-    this.emit("rendered", {type: "fallback"});
+    this.emit("rendered", {domId, type: "fallback"});
   }
   
   _track(eventType, fetchUrl) {

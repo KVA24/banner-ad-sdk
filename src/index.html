@@ -143,7 +143,7 @@
 
 <!-- Load SDK -->
 <script src="/dist/ad-sdk.min.js"></script>
-<!--<script src="https://cdn.jsdelivr.net/gh/KVA24/wi-ad-sdk@v1.0.0/ad-sdk.min.js"></script>-->
+<!--<script src="https://cdn.jsdelivr.net/gh/KVA24/banner-ad-sdk@1.0.2/dist/ad-sdk.min.js"></script>-->
 
 <script>
   (function () {
@@ -161,7 +161,20 @@
     function attachSDKEvents(sdk) {
       if (!sdk) return;
       const events = ['start', 'loaded', 'rendered', 'click', 'destroy', 'error'];
-      events.forEach(ev => sdk.on(ev, detail => log(`sdk.on(${ev})`, detail)));
+      events.forEach(ev => sdk.on(ev, data => {
+        log(`sdk.on(${ev})`, data)
+        switch (data.domId) {
+          case 'ad-slot-1':
+            switch (ev) {
+              case 'start':
+              // add logic --- ///
+              default:
+                return
+            }
+          // add logic --- ///
+          
+        }
+      }));
     }
     
     window.sdk = new AdSDK({
@@ -223,6 +236,9 @@
     const adSlotId = "video-ad-slot";
     const bannerCloseBtn = document.getElementById('banner-close-btn');
     
+    let isSeeking = false;
+    let pauseTimeout = null;
+    
     const showBanner = () => {
       if (!window.sdk) return;
       const el = document.getElementById(adSlotId);
@@ -243,16 +259,36 @@
       console.log('Banner hidden (video playing or closed)');
     };
     
-    // Video events
-    video.addEventListener('pause', showBanner);
+    // --- Seeking detection ---
+    video.addEventListener('seeking', () => {
+      isSeeking = true;
+    });
+    
+    video.addEventListener('seeked', () => {
+      setTimeout(() => {
+        isSeeking = false;
+      }, 100);
+    });
+    
+    // --- Pause detection without seek ---
+    video.addEventListener('pause', () => {
+      if (isSeeking) return;
+      
+      clearTimeout(pauseTimeout);
+      pauseTimeout = setTimeout(() => {
+        if (!video.paused || isSeeking) return;
+        showBanner();
+      }, 150);
+    });
+    
     video.addEventListener('play', hideBanner);
     video.addEventListener('ended', hideBanner);
     
-    // Close button
     bannerCloseBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       hideBanner();
     });
+    
   })();
 </script>
 </body>
