@@ -140,7 +140,7 @@
 
 <!-- Load SDK -->
 <script src="/dist/ad-sdk.min.js"></script>
-<!--<script src="https://cdn.jsdelivr.net/gh/KVA24/banner-ad-sdk@1.0.3/dist/ad-sdk.min.js"></script>-->
+<!--<script src="https://cdn.jsdelivr.net/gh/KVA24/banner-ad-sdk@1.0.6/dist/ad-sdk.min.js"></script>-->
 
 <script>
   (function () {
@@ -188,8 +188,6 @@
       env: AdSDK.ENV.SANDBOX,
       type: AdSDK.TYPE.INSTREAM,
       debug: true,
-      adSize: AdSDK.AD_SIZE.LARGE_BANNER,
-      bannerType: AdSDK.BANNER_TYPE.DISPLAY,
       tenantId: 14,
       contentType: AdSDK.CONTENT_TYPE.VIDEO,
       title: "noi dung 1",
@@ -205,19 +203,19 @@
     
     document.getElementById('btn-start-1').addEventListener('click', () => {
       if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.start("ad-slot-1", "DISPLAY", "MEDIUM_BANNER", "homepage1");
+      window.sdk.start("ad-slot-1", "DISPLAY", "LARGE_BANNER", "homepage1");
       log('sdk.start() called');
     });
     
     document.getElementById('btn-start-2').addEventListener('click', () => {
       if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.start("ad-slot-2", "DISPLAY", "MEDIUM_BANNER", "homepage2");
+      window.sdk.start("ad-slot-2", "DISPLAY", "LARGE_BANNER", "homepage2");
       log('sdk.start() called');
     });
     
     document.getElementById('btn-start-3').addEventListener('click', () => {
       if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.start("ad-slot-3", "DISPLAY", "MEDIUM_BANNER", "homepage3");
+      window.sdk.start("ad-slot-3", "DISPLAY", "LARGE_BANNER", "homepage3");
       log('sdk.start() called');
     });
     
