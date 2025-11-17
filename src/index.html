@@ -107,28 +107,6 @@
       opacity:0;
       transition: opacity 0.3s;
     ">
-      <button id="banner-close-btn" style="
-        position:absolute;
-        top:5px;
-        right:5px;
-        width:20px;
-        height:20px;
-        border:none;
-        border-radius:50%;
-        background:rgba(0,0,0,0.5);
-        color:#fff;
-        font-size:14px;
-        cursor:pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 12px;
-        z-index: 11;
-        opacity:0;
-        pointer-events:none;
-        transition: opacity 0.3s;
-      ">✕
-      </button>
     </div>
   </div>
 </div>
@@ -140,7 +118,7 @@
 
 <!-- Load SDK -->
 <script src="/dist/ad-sdk.min.js"></script>
-<!--<script src="https://cdn.jsdelivr.net/gh/KVA24/banner-ad-sdk@1.0.6/dist/ad-sdk.min.js"></script>-->
+<!--<script src="https://cdn.jsdelivr.net/gh/KVA24/banner-ad-sdk@1.0.8/dist/ad-sdk.min.js"></script>-->
 
 <script>
   (function () {
@@ -172,11 +150,12 @@
           case 'video-ad-slot':
             switch (ev) {
               case 'skip':
-                const closeBtn = document.getElementById("banner-close-btn");
-                if (!closeBtn) return;
-                
-                closeBtn.style.opacity = "1";
-                closeBtn.style.pointerEvents = "auto";
+                const adSlotId = "video-ad-slot";
+                const el = document.getElementById(adSlotId);
+                if (!el) return;
+                el.style.pointerEvents = 'none';
+                el.style.opacity = '0';
+                window.sdk.destroy(adSlotId);
               default:
                 return
             }
@@ -250,7 +229,6 @@
   (function () {
     const video = document.getElementById('video-demo');
     const adSlotId = "video-ad-slot";
-    const bannerCloseBtn = document.getElementById('banner-close-btn');
     
     let isSeeking = false;
     let pauseTimeout = null;
@@ -271,9 +249,6 @@
       if (!el) return;
       el.style.pointerEvents = 'none';
       el.style.opacity = '0';
-      const closeBtn = document.getElementById('banner-close-btn');
-      closeBtn.style.opacity = '0';
-      closeBtn.style.pointerEvents = 'none';
       window.sdk.destroy(adSlotId);
       console.log('Banner hidden (video playing or closed)');
     };
@@ -302,11 +277,6 @@
     
     video.addEventListener('play', hideBanner);
     video.addEventListener('ended', hideBanner);
-    
-    bannerCloseBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      hideBanner();
-    });
     
   })();
 </script>

@@ -246,7 +246,7 @@ export default class AdSDK {
       const data = await this._fetchAd(domId, token, bannerType, adSize, positionId);
       // If token changed, fetched result was ignored by _fetchAd when stale and an error thrown
       this._adData[domId] = data;
-      this._renderAd(data, token, domId);
+      this._renderAd(data, token, domId, bannerType);
       this._track("impression", data.trackingEvents?.impression);
       this.emit("loaded", {domId, data});
     } catch (err) {
@@ -467,11 +467,12 @@ export default class AdSDK {
     // Setup timer new
     this._skipTimers[domId] = setTimeout(() => {
       if (token !== this._startTokens[domId]) return;
-      this.emit("skip", {domId: domId, ad});
+      document.getElementById(domId).querySelector('.banner-close-btn').style.opacity = "1";
+      document.getElementById(domId).querySelector('.banner-close-btn').style.pointerEvents = "auto";
     }, ad.skipOffSet * 1000);
   }
   
-  _renderAd(ad, token, domId) {
+  _renderAd(ad, token, domId, bannerType) {
     if (!ad || !ad.bannerSource) return this._renderFallback(domId);
     
     // If token outdated, skip render
@@ -488,6 +489,40 @@ export default class AdSDK {
     
     // clear container content
     container.innerHTML = "";
+    
+    if (bannerType === "OVERLAY") {
+      const buttonSkip = document.createElement("button");
+      buttonSkip.className = "banner-close-btn";
+      buttonSkip.innerHTML = "✕";
+      buttonSkip.style.cssText = `
+        position:absolute;
+        top:5px;
+        right:5px;
+        width:20px;
+        height:20px;
+        border:none;
+        border-radius:50%;
+        background:rgba(0,0,0,0.5);
+        color:#fff;
+        font-size:14px;
+        cursor:pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+        z-index: 9999;
+        opacity:0;
+        pointer-events:none;
+        transition: opacity 0.3s;
+      `
+      container.appendChild(buttonSkip);
+      buttonSkip.addEventListener("click", () => {
+        this.emit("skip", {domId: domId, ad});
+        this._track("skip", ad.trackingEvents?.skip);
+        buttonSkip.style.opacity = "0";
+        buttonSkip.style.pointerEvents = "none";
+      });
+    }
     
     switch (ad.bannerSource) {
       case "IMG": {
@@ -651,7 +686,7 @@ export default class AdSDK {
         clickLayer.style.cssText = `
             position:absolute;
             inset:0;
-            z-index:9999;
+            z-index:9998;
             cursor:pointer;
             background:rgba(0,0,0,0);
         `;
