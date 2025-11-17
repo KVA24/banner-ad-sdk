@@ -67,12 +67,10 @@ export default class AdSDK {
     const fetchUrl =
       `${baseCfg.fetchUrl}?t=${baseCfg.tenantId}`
       + `&sid=${baseCfg.streamId}`
-      + `&pid=${baseCfg.positionId}`
       + `&cid=${baseCfg.channelId}`
       + `&p=${baseCfg.platform}`
       + `&dt=${baseCfg.deviceType}`
       + `&d=${deviceId}`
-      + `&si=${sign}`
       + `&ai=${baseCfg.adId || ""}`
       + `&ct=${baseCfg.contentType || ""}`
       + `&tt=${baseCfg.title || ""}`
@@ -158,9 +156,10 @@ export default class AdSDK {
     return {sign, salt, deviceId};
   }
   
-  async _fetchAd(token, bannerType, adSize) {
+  async _fetchAd(token, bannerType, adSize, positionId) {
+    const {sign, salt, deviceId} = this._sign(positionId, this.cfg.tenantId);
     const {fetchUrl, position, fetchTimeout, fetchRetries, fetchBackoff, debug} = this.cfg;
-    const url = `${fetchUrl}&bt=${bannerType || ""}&as=${adSize || ""}`; // note: fetchUrl already contains query params
+    const url = `${fetchUrl}&si=${sign}&bt=${bannerType || ""}&as=${adSize || ""}&pid=${positionId || ""}`; // note: fetchUrl already contains query params
     let attempt = 0;
     
     const doFetch = async () => {
@@ -195,7 +194,7 @@ export default class AdSDK {
   }
   
   // Start — idempotent: duplicate calls ignored
-  async start(domId, bannerType, adSize) {
+  async start(domId, bannerType, adSize, positionId) {
     // Always allow start: re-render fresh view
     if (!domId && this.cfg.type !== AdSDK.TYPE.WELCOME) throw new Error("AdSDK.start(domId) requires a DOM ID");
     
@@ -233,7 +232,7 @@ export default class AdSDK {
     
     try {
       this.emit("request", {domId});
-      const data = await this._fetchAd(token, bannerType, adSize);
+      const data = await this._fetchAd(token, bannerType, adSize, positionId);
       // If token changed, fetched result was ignored by _fetchAd when stale and an error thrown
       this._adData = data;
       this._renderAd(data, token, domId);
@@ -405,38 +404,73 @@ export default class AdSDK {
     switch (ad.bannerSource) {
       case "IMG": {
         const img = new Image();
-        img.style.width = "100%";
-        img.style.height = "100%";
-        img.style.aspectRatio = ad.ratioWidth / ad.ratioHeight;
         img.src = ad.content;
+        img.style.position = "absolute";  // cần để scale + center
+        img.style.top = "0";
+        img.style.left = "0";
+        img.style.transformOrigin = "top left";
+        img.style.cursor = ad.clickThrough ? "pointer" : "default";
+        
+        // Scale + center image trong container
+        const applyScale = () => {
+          if (!this.container) return;
+          const wrapW = this.container.clientWidth;
+          const wrapH = this.container.clientHeight;
+          if (!wrapW || !wrapH) return;
+          
+          const scale = Math.min(wrapW / ad.ratioWidth, wrapH / ad.ratioHeight);
+          
+          img.style.width = ad.ratioWidth + "px";
+          img.style.height = ad.ratioHeight + "px";
+          img.style.transform = `scale(${scale})`;
+          img.style.left = (wrapW - ad.ratioWidth * scale) / 2 + "px";
+          img.style.top = (wrapH - ad.ratioHeight * scale) / 2 + "px";
+          
+          this.container.style.position = "relative";
+          this.container.style.overflow = "hidden";
+        };
+        
+        // Append trước để onload/onerror kích hoạt
+        this.container.appendChild(img);
+        applyScale();
+        
+        // Auto update khi resize
+        const resizeHandler = () => applyScale();
+        window.addEventListener("resize", resizeHandler);
+        
+        // Lưu cleanup để destroy
+        this._imgCleanup = () => {
+          window.removeEventListener("resize", resizeHandler);
+        };
+        
+        // onload/onerror
         img.onload = () => {
-          // token & container check inside callback
           if (token !== this._startToken) return;
           if (!this.container) return;
-          this.container.appendChild(img);
-          this.emit("rendered", {domId, ad});
+          this.emit("rendered", { domId, ad });
         };
+        
         img.onerror = () => {
           console.error("[AdSDK] Image load error:", img.src);
           if (token !== this._startToken) return;
           this._track("error", ad.trackingEvents.error);
-          this.emit(
-            "error",
-            new Error(`Image load error: ${img.src}`)
-          )
+          this.emit("error", new Error(`Image load error: ${img.src}`));
           this._renderFallback(domId);
         };
+        
+        // Click tracking
         if (ad.clickThrough) {
-          img.style.cursor = "pointer";
           img.addEventListener("click", () => {
             if (token !== this._startToken) return;
             window.open(ad.clickThrough, "_blank");
             this._track("click", ad.clickTracking);
-            this.emit("click", {domId, ad});
+            this.emit("click", { domId, ad });
           });
         }
+        
         break;
       }
+      
       
       case "URL":
       case "HTML":
@@ -780,7 +814,7 @@ export default class AdSDK {
       
       switch (data.type) {
         case "start":
-          this.start(data.domId || this.cfg.domId, data.bannerType, data.adSize).then();
+          this.start(data.domId || this.cfg.domId, data.bannerType, data.adSize, data.positionId).then();
           break;
         case "render":
           this._renderAd(data.payload, this._startToken);

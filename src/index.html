@@ -24,20 +24,9 @@
       background: #fff;
     }
     
-    #ad-slot-1 {
+    #ad-slot-1, #ad-slot-2, #ad-slot-3 {
       width: 100%;
-      height: 250px;
-      border: 1px dashed #aaa;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #fafafa;
-      position: relative;
-    }
-    
-    #ad-slot-2 {
-      width: 100%;
-      height: 250px;
+      height: 200px;
       border: 1px dashed #aaa;
       display: flex;
       align-items: center;
@@ -73,18 +62,22 @@
 
 <div class="panel">
   <h3>1) Khung quảng cáo</h3>
-  <div id="ad-slot-1">Ad slot - 1</div>
+  <div id="ad-slot-1">Ad slot - 1 - URL</div>
   <div class="muted">Element ID: <code>ad-slot-1</code></div>
-  <div id="ad-slot-2">Ad slot - 2</div>
+  <div id="ad-slot-2">Ad slot - 2 - IMG</div>
   <div class="muted">Element ID: <code>ad-slot-2</code></div>
+  <div id="ad-slot-3">Ad slot - 3 - SDK</div>
+  <div class="muted">Element ID: <code>ad-slot-3</code></div>
 </div>
 
 <div class="panel controls">
   <h3>2) Thao tác SDK</h3>
   <button id="btn-start-1">Start ad 1 (sdk.start())</button>
-  <button id="btn-destroy-1">Destroy (sdk.destroy())</button>
+  <button id="btn-destroy-1">Destroy ad 1 (sdk.destroy())</button>
   <button id="btn-start-2">Start ad 2 (sdk.start())</button>
-  <button id="btn-destroy-2">Destroy (sdk.destroy())</button>
+  <button id="btn-destroy-2">Destroy ad 2(sdk.destroy())</button>
+  <button id="btn-start-3">Start ad 3 (sdk.start())</button>
+  <button id="btn-destroy-3">Destroy ad 3 (sdk.destroy())</button>
 </div>
 
 <div class="panel">
@@ -181,10 +174,9 @@
       env: AdSDK.ENV.SANDBOX,
       type: AdSDK.TYPE.INSTREAM,
       debug: true,
-      adSize: AdSDK.AD_SIZE.MEDIUM_BANNER,
+      adSize: AdSDK.AD_SIZE.LARGE_BANNER,
       bannerType: AdSDK.BANNER_TYPE.DISPLAY,
       tenantId: 14,
-      positionId: "homepage1",
       contentType: AdSDK.CONTENT_TYPE.VIDEO,
       title: "noi dung 1",
       transId: "111",
@@ -199,13 +191,19 @@
     
     document.getElementById('btn-start-1').addEventListener('click', () => {
       if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.start("ad-slot-1", "DISPLAY", "MEDIUM_BANNER");
+      window.sdk.start("ad-slot-1", "DISPLAY", "MEDIUM_BANNER", "homepage1");
       log('sdk.start() called');
     });
     
     document.getElementById('btn-start-2').addEventListener('click', () => {
       if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.start("ad-slot-2", "DISPLAY", "MEDIUM_BANNER");
+      window.sdk.start("ad-slot-2", "DISPLAY", "MEDIUM_BANNER", "homepage2");
+      log('sdk.start() called');
+    });
+    
+    document.getElementById('btn-start-3').addEventListener('click', () => {
+      if (!window.sdk) return log('SDK not ready. Call init first.');
+      window.sdk.start("ad-slot-3", "DISPLAY", "MEDIUM_BANNER", "homepage3");
       log('sdk.start() called');
     });
     
@@ -220,6 +218,12 @@
       window.sdk.destroy("ad-slot-2");
       log('sdk.destroy() called');
     });
+    
+    document.getElementById('btn-destroy-3').addEventListener('click', () => {
+      if (!window.sdk) return log('SDK not ready. Call init first.');
+      window.sdk.destroy("ad-slot-3");
+      log('sdk.destroy() called');
+    })
     
     // Test outer click
     // document.getElementById('ad-slot').addEventListener('click', () => {
