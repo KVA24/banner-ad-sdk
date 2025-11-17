@@ -123,6 +123,10 @@
         align-items: center;
         justify-content: center;
         padding: 12px;
+        z-index: 11;
+        opacity:0;
+        pointer-events:none;
+        transition: opacity 0.3s;
       ">✕
       </button>
     </div>
@@ -153,7 +157,7 @@
     
     function attachSDKEvents(sdk) {
       if (!sdk) return;
-      const events = ['start', 'loaded', 'rendered', 'click', 'destroy', 'error'];
+      const events = ['start', 'loaded', 'rendered', 'skip', 'click', 'destroy', 'error'];
       events.forEach(ev => sdk.on(ev, data => {
         log(`sdk.on(${ev})`, data)
         switch (data.domId) {
@@ -165,7 +169,17 @@
                 return
             }
           // add logic --- ///
-          
+          case 'video-ad-slot':
+            switch (ev) {
+              case 'skip':
+                const closeBtn = document.getElementById("banner-close-btn");
+                if (!closeBtn) return;
+                
+                closeBtn.style.opacity = "1";
+                closeBtn.style.pointerEvents = "auto";
+              default:
+                return
+            }
         }
       }));
     }
@@ -259,6 +273,9 @@
       if (!el) return;
       el.style.pointerEvents = 'none';
       el.style.opacity = '0';
+      const closeBtn = document.getElementById('banner-close-btn');
+      closeBtn.style.opacity = '0';
+      closeBtn.style.pointerEvents = 'none';
       window.sdk.destroy(adSlotId);
       console.log('Banner hidden (video playing or closed)');
     };

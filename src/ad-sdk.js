@@ -139,7 +139,7 @@ export default class AdSDK {
       localStorage.setItem(key, deviceId);
     }
     
-    const raw = `${positionId}${deviceId}${tenantId}${salt}`;
+    const raw = `${positionId || ""}${deviceId}${tenantId}${salt}`;
     const hash = md5(raw).toString();
     const sign = salt + hash;
     
@@ -294,6 +294,11 @@ export default class AdSDK {
       this._iframeCleanup();
       this._iframeCleanup = null;
     }
+    
+    if (this._skipTimer) {
+      clearTimeout(this._skipTimer);
+      this._skipTimer = null;
+    }
     // Nếu truyền domId, chỉ xóa container trong DOM đó
     if (domId) {
       const el = document.getElementById(domId);
@@ -385,6 +390,25 @@ export default class AdSDK {
     };
   }
   
+  _startSkipCountdown(token, domId, ad) {
+    // Không có skipOffset => không làm gì
+    if (!ad.skipOffSet) return;
+    
+    // Clear timer cũ nếu có
+    if (this._skipTimer) {
+      clearTimeout(this._skipTimer);
+      this._skipTimer = null;
+    }
+    
+    // Setup timer mới
+    this._skipTimer = setTimeout(() => {
+      // Nếu token đã đổi thì không emit skip
+      if (token !== this._startToken) return;
+      
+      // Emit skip
+      this.emit("skip", {domId: domId, ad});
+    }, ad.skipOffSet * 1000);
+  }
   
   _renderAd(ad, token, domId) {
     if (!ad || !ad.bannerSource) return this._renderFallback(domId);
@@ -447,7 +471,8 @@ export default class AdSDK {
         img.onload = () => {
           if (token !== this._startToken) return;
           if (!this.container) return;
-          this.emit("rendered", { domId, ad });
+          this.emit("rendered", {domId, ad});
+          this._startSkipCountdown(token, domId, ad);
         };
         
         img.onerror = () => {
@@ -464,7 +489,7 @@ export default class AdSDK {
             if (token !== this._startToken) return;
             window.open(ad.clickThrough, "_blank");
             this._track("click", ad.clickTracking);
-            this.emit("click", { domId, ad });
+            this.emit("click", {domId, ad});
           });
         }
         
@@ -509,6 +534,7 @@ export default class AdSDK {
             const onIframeMessage = (e) => {
               if (e.data?.imageLoaded) {
                 this.emit("rendered", {domId, ad});
+                this._startSkipCountdown(token, domId, ad);
                 window.removeEventListener("message", onIframeMessage);
               }
             };
@@ -516,6 +542,7 @@ export default class AdSDK {
             window.addEventListener("message", onIframeMessage);
           } catch (err) {
             this.emit("rendered", {domId, ad});
+            this._startSkipCountdown(token, domId, ad);
           }
         };
         
