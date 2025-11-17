@@ -291,6 +291,10 @@ export default class AdSDK {
   
   // Destroy — view-only: do NOT reset SDK internals like domEl or _started
   destroy(domId) {
+    if (this._iframeCleanup) {
+      this._iframeCleanup();
+      this._iframeCleanup = null;
+    }
     // Nếu truyền domId, chỉ xóa container trong DOM đó
     if (domId) {
       const el = document.getElementById(domId);
@@ -340,6 +344,49 @@ export default class AdSDK {
     log(this.cfg.debug, 'SDK fully reset (destroyHard).');
   }
   
+  fitBannerIframe(slotId, iframe, originalW, originalH) {
+    const wrapper = (typeof slotId === "string")
+      ? document.getElementById(slotId)
+      : slotId;
+    
+    if (!wrapper || !iframe) return;
+    
+    const applyScale = () => {
+      const wrapW = wrapper.clientWidth;
+      const wrapH = wrapper.clientHeight;
+      
+      if (!wrapW || !wrapH) return;
+      
+      const scale = Math.min(wrapW / originalW, wrapH / originalH);
+      
+      iframe.style.width = originalW + "px";
+      iframe.style.height = originalH + "px";
+      
+      iframe.style.transform = `scale(${scale})`;
+      iframe.style.transformOrigin = "top left";
+      
+      iframe.style.position = "absolute";
+      iframe.style.left = (wrapW - originalW * scale) / 2 + "px";
+      iframe.style.top = (wrapH - originalH * scale) / 2 + "px";
+      
+      wrapper.style.position = "relative";
+      wrapper.style.overflow = "hidden";
+    };
+    
+    // Scale ngay
+    applyScale();
+    
+    // Auto update khi resize
+    const resizeHandler = () => applyScale();
+    window.addEventListener("resize", resizeHandler);
+    
+    // Cleanup khi destroy
+    return () => {
+      window.removeEventListener("resize", resizeHandler);
+    };
+  }
+  
+  
   _renderAd(ad, token, domId) {
     if (!ad || !ad.bannerSource) return this._renderFallback(domId);
     // If token outdated, skip render
@@ -384,7 +431,7 @@ export default class AdSDK {
           img.addEventListener("click", () => {
             if (token !== this._startToken) return;
             window.open(ad.clickThrough, "_blank");
-            this._track("click", ad);
+            this._track("click", ad.clickTracking);
             this.emit("click", {domId, ad});
           });
         }
@@ -395,13 +442,34 @@ export default class AdSDK {
       case "HTML":
       case "SDK": {
         if (token !== this._startToken) return;
+        
         const iframe = document.createElement("iframe");
         iframe.src = ad.content;
-        iframe.width = this.cfg.width || ad.width || "100%";
-        iframe.height = this.cfg.height || ad.height || "100%";
+        iframe.width = ad.ratioWidth || this.cfg.width;
+        iframe.height = ad.ratioHeight || this.cfg.height;
         iframe.style.border = "none";
-        iframe.sandbox = "allow-scripts allow-same-origin allow-popups";
+        iframe.sandbox = "allow-scripts allow-same-origin allow-popups allow-top-navigation-by-user-activation";
+        
+        try {
+          const url = new URL(ad.content);
+          iframe.src = url.href;
+        } catch (err) {
+          iframe.srcdoc = ad.content;
+        }
+        
         this.container.appendChild(iframe);
+        
+        // Fit banner vào slot
+        const cleanupFit = this.fitBannerIframe(
+          this.container,
+          iframe,
+          iframe.width,
+          iframe.height
+        );
+        
+        // Lưu cleanup để destroy()
+        this._iframeCleanup = cleanupFit;
+        
         iframe.onload = () => {
           try {
             const onIframeMessage = (e) => {
@@ -416,21 +484,16 @@ export default class AdSDK {
             this.emit("rendered", {domId, ad});
           }
         };
-        break;
-      }
-      
-      case "html":
-        if (token !== this._startToken) return;
-        this.container.innerHTML = ad.html || "<div>Advertisement</div>";
-        this.emit("rendered", ad);
-        break;
-      
-      case "script": {
-        if (token !== this._startToken) return;
-        const s = document.createElement("script");
-        s.src = ad.url;
-        this.container.appendChild(s);
-        this.emit("rendered", ad);
+        
+        const onIframeMessage = (e) => {
+          if (e.data?.type === "SDK_CLICK") {
+            window.open(ad.clickThrough, "_blank");
+            this._track("click", ad.clickTracking);
+            this.emit("click", {domId, ad});
+          }
+        };
+        window.addEventListener("message", onIframeMessage);
+        
         break;
       }
       
@@ -717,7 +780,7 @@ export default class AdSDK {
       
       switch (data.type) {
         case "start":
-          this.start(data.domId || this.cfg.domId);
+          this.start(data.domId || this.cfg.domId, data.bannerType, data.adSize).then();
           break;
         case "render":
           this._renderAd(data.payload, this._startToken);
@@ -726,7 +789,7 @@ export default class AdSDK {
           this.destroy();
           break;
         case "refresh":
-          this.refresh();
+          this.refresh().then();
           break;
       }
     };
@@ -790,6 +853,7 @@ export default class AdSDK {
 }
 
 // ---- Auto-init ----
+window.SDK_INIT = undefined;
 if (typeof window !== "undefined" && window.SDK_INIT && typeof window.SDK_INIT === "object") {
   window.sdk = new AdSDK(window.SDK_INIT);
   if (window.SDK_INIT.domId) window.sdk.start(window.SDK_INIT.domId);
