@@ -439,7 +439,7 @@ export default class AdSDK {
       iframe.style.top = (wrapH - originalH * scale) / 2 + "px";
       
       wrapper.style.position = "relative";
-      wrapper.style.overflow = "hidden";
+      wrapper.style.overflow = "visible";
     };
     
     // initial
@@ -496,8 +496,8 @@ export default class AdSDK {
       buttonSkip.innerHTML = "✕";
       buttonSkip.style.cssText = `
         position:absolute;
-        top:5px;
-        right:5px;
+        top:0;
+        right:0;
         width:20px;
         height:20px;
         border:none;
@@ -514,6 +514,7 @@ export default class AdSDK {
         opacity:0;
         pointer-events:none;
         transition: opacity 0.3s;
+        transform: translate(50%, -50%);
       `
       container.appendChild(buttonSkip);
       buttonSkip.addEventListener("click", () => {
@@ -598,6 +599,8 @@ export default class AdSDK {
       case "HTML":
       case "SDK": {
         if (token !== this._startTokens[domId]) return;
+        
+        container.style.overflow = "visible";
         
         const iframe = document.createElement("iframe");
         iframe.style.border = "none";
