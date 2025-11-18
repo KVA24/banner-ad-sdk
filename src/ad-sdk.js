@@ -257,7 +257,6 @@ export default class AdSDK {
       // If token changed, fetched result was ignored by _fetchAd when stale and an error thrown
       this._adData[domId] = data;
       this._renderAd(data, token, domId, bannerType);
-      this._track("impression", data.trackingEvents?.impression);
       this.emit("loaded", {domId, data});
     } catch (err) {
       if (err.message === 'stale_fetch') {
@@ -441,8 +440,10 @@ export default class AdSDK {
     // Setup timer new
     this._skipTimers[domId] = setTimeout(() => {
       if (token !== this._startTokens[domId]) return;
-      document.getElementById(domId).querySelector('.banner-close-btn').style.opacity = "1";
-      document.getElementById(domId).querySelector('.banner-close-btn').style.pointerEvents = "auto";
+      if (document.getElementById(domId).querySelector('.banner-close-btn')) {
+        document.getElementById(domId).querySelector('.banner-close-btn').style.opacity = "1";
+        document.getElementById(domId).querySelector('.banner-close-btn').style.pointerEvents = "auto";
+      }
     }, ad.skipOffSet * 1000);
   }
   
@@ -564,6 +565,7 @@ export default class AdSDK {
         }
         
         this.emit("rendered", {domId, ad});
+        this._track("impression", ad.trackingEvents?.impression);
         // Không cần gọi _startSkipCountdown ở đây vì đã xử lý closeBtn ở trên
       };
       
@@ -633,6 +635,7 @@ export default class AdSDK {
           if (token !== this._startTokens[domId]) return;
           if (!this._containers[domId]) return;
           this.emit("rendered", {domId, ad});
+          this._track("impression", ad.trackingEvents?.impression);
           this._startSkipCountdown(token, domId, ad);
         };
         
@@ -706,41 +709,62 @@ export default class AdSDK {
         // listener for iframe messages (only handle messages that include domId)
         this._iframeListeners[domId] = (e) => {
           const d = e.data;
-          if (!d) return;
           
-          // Support two flows:
-          // 1) iframe posts { channel: 'ad-sdk', type: 'rendered', domId } etc.
-          // 2) legacy: iframe posts { imageLoaded: true } (no domId) -> only accept if from expected iframe (best-effort)
-          if (d.channel && d.channel !== this.cfg.postMessageChannel) return;
+          console.log('[AdSDK Debug] Message received:', {
+            origin: e.origin,
+            data: d,
+            expectedDomId: domId,
+            expectedChannel: this.cfg.postMessageChannel
+          });
+          
+          if (!d) {
+            console.log('[AdSDK Debug] No data in message');
+            return;
+          }
+          
+          if (d.channel && d.channel !== this.cfg.postMessageChannel) {
+            console.log('[AdSDK Debug] Wrong channel:', d.channel, 'expected:', this.cfg.postMessageChannel);
+            return;
+          }
           
           // if domId provided in message, filter by it
-          if (d.domId && d.domId !== domId) return;
+          if (d.domId && d.domId !== domId) {
+            console.log('[AdSDK Debug] Wrong domId:', d.domId, 'expected:', domId);
+            return;
+          }
           
           // handle render-ready signals from iframe
-          if (d.imageLoaded || d.type === "RENDERED" || d.event === "rendered") {
-            if (token !== this._startTokens[domId]) return;
+          if (d.imageLoaded || d.type === "RENDERED" || d.event === "rendered" || d.action === "ADS_LOADED") {
+            console.log('[AdSDK Debug] ✅ RENDERED signal detected!');
+            if (token !== this._startTokens[domId]) {
+              console.log('[AdSDK Debug] Token mismatch, ignoring');
+              return;
+            }
             this.emit("rendered", {domId, ad});
+            this._track("impression", ad.trackingEvents?.impression);
             this._startSkipCountdown(token, domId, ad);
-            // do not remove listener here — keep for clicks
+          } else {
+            console.log('[AdSDK Debug] ⚠️ Message not recognized as RENDERED signal');
           }
         };
         
         // register listener
         window.addEventListener("message", this._iframeListeners[domId]);
+        console.log('[AdSDK Debug] Listener registered for domId:', domId);
         
         // onload fallback: if iframe doesn't post imageLoaded, still emit rendered
-        iframe.onload = () => {
-          try {
-            if (token !== this._startTokens[domId]) return;
-            // Do not auto-emit here if we expect imageLoaded from iframe — but safe fallback:
-            this.emit("rendered", {domId, ad});
-            this._startSkipCountdown(token, domId, ad);
-          } catch (err) {
-            // ignore
-            this.emit("rendered", {domId, ad});
-            this._startSkipCountdown(token, domId, ad);
-          }
-        };
+        // iframe.onload = () => {
+        //   try {
+        //     if (token !== this._startTokens[domId]) return;
+        //     // Do not auto-emit here if we expect imageLoaded from iframe — but safe fallback:
+        //     this.emit("rendered", {domId, ad});
+        //     this._startSkipCountdown(token, domId, ad);
+        //   } catch (err) {
+        //     // ignore
+        //     this.emit("rendered", {domId, ad});
+        //     this._startSkipCountdown(token, domId, ad);
+        //   }
+        // };
         
         // Tạo overlay click cho container
         const wrapper = document.getElementById(domId);
