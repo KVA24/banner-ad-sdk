@@ -78,6 +78,7 @@
   <button id="btn-destroy-2">Destroy ad 2(sdk.destroy())</button>
   <button id="btn-start-3">Start ad 3 (sdk.start())</button>
   <button id="btn-destroy-3">Destroy ad 3 (sdk.destroy())</button>
+  <button id="btn-welcome">Test Welcome</button>
 </div>
 
 <div class="panel">
@@ -165,10 +166,9 @@
     
     window.sdk = new AdSDK({
       env: AdSDK.ENV.SANDBOX,
-      type: AdSDK.TYPE.INSTREAM,
+      type: AdSDK.TYPE.DISPLAY,
       debug: true,
       tenantId: 14,
-      contentType: AdSDK.CONTENT_TYPE.VIDEO,
       title: "noi dung 1",
       transId: "111",
       category: "1, 2",
@@ -177,7 +177,23 @@
       gender: AdSDK.GENDER.MALE,
       uid20: "",
     });
+    
+    window.welcomeSdk = new AdSDK({
+      env: AdSDK.ENV.SANDBOX,
+      type: AdSDK.TYPE.WELCOME,
+      debug: true,
+      tenantId: 14,
+      title: "noi dung 1",
+      transId: "111",
+      category: "1, 2",
+      keyword: "1, 2",
+      age: "20",
+      gender: AdSDK.GENDER.MALE,
+      uid20: "",
+    });
+    
     attachSDKEvents(window.sdk);
+    attachSDKEvents(window.welcomeSdk);
     log('SDK initialized manually');
     
     document.getElementById('btn-start-1').addEventListener('click', () => {
@@ -213,6 +229,12 @@
     document.getElementById('btn-destroy-3').addEventListener('click', () => {
       if (!window.sdk) return log('SDK not ready. Call init first.');
       window.sdk.destroy("ad-slot-3");
+      log('sdk.destroy() called');
+    })
+    
+    document.getElementById('btn-welcome').addEventListener('click', () => {
+      if (!window.sdk) return log('SDK not ready. Call init first.');
+      window.welcomeSdk.start()
       log('sdk.destroy() called');
     })
     

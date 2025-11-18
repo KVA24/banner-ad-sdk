@@ -17,7 +17,7 @@ const sdk = new AdSDK({option});
 ```js
 const sdk = new AdSDK({
   environment: AdSDK.env.SANDBOX,
-  type: AdSDK.type.INSTREAM,
+  type: AdSDK.type.DISPLAY,
   position: "banner_top",
   debug: true,
 });
@@ -37,7 +37,7 @@ HTML:
 | Option | Type | Default | Mô tả |
 |--------|------|----------|--------|
 | `environment` | `AdSDK.env.SANDBOX | AdSDK.env.PRODUCTION` | SANDBOX | Môi trường API fetch quảng cáo |
-| `type` | `AdSDK.type.INSTREAM | OUTSTREAM | WELCOME | VAST` | INSTREAM | Loại quảng cáo |
+| `type` | `AdSDK.type.DISPLAY | OUTSTREAM | WELCOME | VAST` | DISPLAY | Loại quảng cáo |
 | `position` | `string` | `undefined` | Vị trí quảng cáo |
 | `width` / `height` | `number` | `null` | Kích thước cụ thể |
 | `debug` | `boolean` | `false` | Bật log console |
@@ -52,7 +52,7 @@ HTML:
 ### `start(domId?: string)`
 Khởi tạo quảng cáo.
 
-- Với `INSTREAM`, `OUTSTREAM`: truyền `domId` của phần tử.
+- Với `DISPLAY`, `OUTSTREAM`: truyền `domId` của phần tử.
 - Với `WELCOME` hoặc `VAST`: không cần `domId`, SDK sẽ tự tạo overlay.
 
 ```js
@@ -186,7 +186,7 @@ AdSDK.env = {
 };
 
 AdSDK.type = {
-  INSTREAM: "INSTREAM",
+  DISPLAY: "DISPLAY",
   OUTSTREAM: "OUTSTREAM",
   WELCOME: "WELCOME",
   VAST: "VAST",

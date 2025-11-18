@@ -25,9 +25,13 @@ export default class AdSDK {
       fetchRetries: 2,
       fetchBackoff: 300,
     };
-    const ENV = {
+    
+    const ENV = cfg.type === AdSDK.TYPE.WELCOME ? {
+      SANDBOX: extend({}, baseFetch, {fetchUrl: "https://dev-pubads.wiinvent.tv/v1/adserving/welcome/campaign"}),
+      PRODUCTION: extend({}, baseFetch, {fetchUrl: "https://pubads-wiinvent.tv360.vn/v1/adserving/welcome/campaign?"}),
+    } : {
       SANDBOX: extend({}, baseFetch, {fetchUrl: "https://dev-pubads.wiinvent.tv/v1/adserving/banner/campaign"}),
-      PRODUCTION: extend({}, baseFetch, {fetchUrl: "https://dev-pubads.wiinvent.tv/v1/adserving/banner/campaign"}),
+      PRODUCTION: extend({}, baseFetch, {fetchUrl: "https://pubads-wiinvent.tv360.vn/v1/adserving/banner/campaign"}),
     };
     
     const baseCfg = extend(
@@ -38,7 +42,7 @@ export default class AdSDK {
         channelId: cfg.channelId || '',
         positionId: cfg.positionId || '',
         platform: cfg.platform || "WEB",
-        deviceType: cfg.deviceType || "DESKTOP",
+        deviceType: cfg.deviceType || "",
         transId: cfg.transId || '',
         category: cfg.category || '',
         keyword: cfg.keyword || '',
@@ -48,7 +52,7 @@ export default class AdSDK {
         segments: cfg.segments || '',
         
         env: (cfg.env || "SANDBOX").toUpperCase(),
-        type: (cfg.type || "INSTREAM").toUpperCase(),
+        type: (cfg.type || "").toUpperCase(),
         position: cfg.position,
         adSize: cfg.adSize,
         bannerType: cfg.bannerType,
@@ -204,21 +208,27 @@ export default class AdSDK {
     
     // Prepare DOM (reuse domEl if exists)
     if (this.cfg.type === AdSDK.TYPE.WELCOME) {
-      if (!this._welcomeDom) this._welcomeDom = this._createWelcomeDom();
-    } else {
-      const wrapper = (typeof domId === "string") ? document.getElementById(domId) : domId;
-      if (!wrapper) throw new Error(`AdSDK: element #${domId} not found`);
-      this._domEls[domId] = wrapper;
-      // clear display container for DISPLAY type
-      if (bannerType === "DISPLAY") {
-        this._domEls[domId].innerHTML = "";
-        // remove previous container (if exist)
-        const existing = wrapper.querySelector('.ad-sdk-wrapper');
-        if (existing) existing.remove();
+      if (!this._welcomeDom) {
+        this._welcomeDom = this._createWelcomeDom();
+        
+        domId = this._welcomeSlotId;
+        
+        if (!domId) {
+          console.error("Welcome slot was not initialized correctly");
+          return;
+        }
       }
     }
     
-    // Create a fresh container for this domId
+    const wrapper = (typeof domId === "string") ? document.getElementById(domId) : domId;
+    if (!wrapper) throw new Error(`AdSDK: element #${domId} not found`);
+    this._domEls[domId] = wrapper;
+    if (bannerType === "DISPLAY") {
+      this._domEls[domId].innerHTML = "";
+      const existing = wrapper.querySelector('.ad-sdk-wrapper');
+      if (existing) existing.remove();
+    }
+    
     const container = document.createElement("div");
     container.className = "ad-sdk-wrapper";
     if (this.cfg.width) {
@@ -261,49 +271,6 @@ export default class AdSDK {
     }
   }
   
-  // Refresh ad for a particular domId (or all if no domId)
-  async refresh(domId) {
-    if (!this._started) {
-      log(this.cfg.debug, "Cannot refresh before start.");
-      return;
-    }
-    if (domId) {
-      const token = (this._startTokens[domId] || 0) + 1;
-      this._startTokens[domId] = token;
-      const oldContainer = this._containers[domId];
-      try {
-        const data = await this._fetchAd(domId, token);
-        this._adData[domId] = data;
-        // create a new temporary container to avoid flicker
-        const newContainer = document.createElement('div');
-        newContainer.className = 'ad-sdk-wrapper';
-        if (this.cfg.width) newContainer.style.width = `${this.cfg.width}px`;
-        if (this.cfg.height) newContainer.style.height = `${this.cfg.height}px`;
-        
-        this._domEls[domId].appendChild(newContainer);
-        this._containers[domId] = newContainer;
-        
-        this._renderAd(data, token, domId);
-        
-        if (oldContainer?.parentNode) oldContainer.parentNode.removeChild(oldContainer);
-        this._track('impression', data.trackingEvents?.impression);
-        this.emit('loaded', {domId, data});
-      } catch (err) {
-        if (err.message === 'stale_fetch') {
-          log(this.cfg.debug, `Stale refresh ignored for #${domId}.`);
-          return;
-        }
-        log(this.cfg.debug, `Refresh fetch error for #${domId}: ${err.message}`);
-        this._renderFallback(domId);
-        this.emit('error', {domId, err});
-      }
-    } else {
-      // refresh all active slots
-      const domIds = Object.keys(this._containers);
-      await Promise.all(domIds.map(id => this.refresh(id)));
-    }
-  }
-  
   // Destroy — view-only: do NOT reset SDK internals like other slots
   destroy(domId) {
     const wrapper = document.getElementById(domId);
@@ -312,6 +279,13 @@ export default class AdSDK {
     
     // if domId provided, only remove that slot
     if (domId) {
+      if (domId === this._welcomeSlotId) {
+        if (this._welcomeDom) {
+          this._welcomeDom.remove();
+        }
+        this._welcomeDom = null;
+        this._welcomeSlotId = null;
+      }
       // cleanup iframe listener for that slot
       if (this._iframeListeners?.[domId]) {
         window.removeEventListener("message", this._iframeListeners[domId]);
@@ -462,7 +436,7 @@ export default class AdSDK {
     }
     
     // Không có skipOffset => không làm gì
-    if (!ad || !ad.skipOffSet) return;
+    if (!ad || ad.skipOffSet < 0) return;
     
     // Setup timer new
     this._skipTimers[domId] = setTimeout(() => {
@@ -473,8 +447,7 @@ export default class AdSDK {
   }
   
   _renderAd(ad, token, domId, bannerType) {
-    if (!ad || !ad.bannerSource) return this._renderFallback(domId);
-    
+    if (!ad) return this._renderFallback(domId);
     // If token outdated, skip render
     if (token !== this._startTokens[domId]) {
       log(this.cfg.debug, `Render ignored for #${domId} (stale token:${token})`, 'warn');
@@ -525,6 +498,95 @@ export default class AdSDK {
       });
     }
     
+    if (this.cfg.type === AdSDK.TYPE.WELCOME) {
+      const img = new Image();
+      img.src = ad.url;
+      img.style.position = "absolute";
+      img.style.top = "0";
+      img.style.left = "0";
+      img.style.transformOrigin = "top left";
+      img.style.cursor = ad.clickThrough ? "pointer" : "default";
+      
+      // Scale + center image trong container
+      const applyScale = () => {
+        if (!this._containers[domId]) return;
+        const wrapW = container.clientWidth;
+        const wrapH = container.clientHeight;
+        if (!wrapW || !wrapH) return;
+        
+        const scale = Math.min(wrapW / ad.ratioWidth, wrapH / ad.ratioHeight) || 1;
+        
+        img.style.width = ad.ratioWidth + "px";
+        img.style.height = ad.ratioHeight + "px";
+        img.style.transform = `scale(${scale})`;
+        img.style.left = (wrapW - ad.ratioWidth * scale) / 2 + "px";
+        img.style.top = (wrapH - ad.ratioHeight * scale) / 2 + "px";
+        
+        container.style.position = "relative";
+        container.style.overflow = "visible";
+      };
+      
+      // Append before applying scale so onload triggers
+      container.appendChild(img);
+      applyScale();
+      
+      // Auto update khi resize
+      const resizeHandler = () => applyScale();
+      window.addEventListener("resize", resizeHandler);
+      
+      // store cleanup
+      this._imgCleanups[domId] = () => {
+        window.removeEventListener("resize", resizeHandler);
+      };
+      
+      img.onload = () => {
+        if (token !== this._startTokens[domId]) return;
+        if (!this._containers[domId]) return;
+        
+        // ========== HIỆN WELCOME OVERLAY SAU KHI ẢNH LOAD XONG ==========
+        if (this._welcomeDom) {
+          requestAnimationFrame(() => {
+            this._welcomeDom.style.opacity = "1";
+          });
+        }
+        
+        // Bắt đầu đếm ngược cho nút close
+        const skipOffset = ad.skipOffSet || 0;
+        
+        if (this._welcomeCloseBtn && skipOffset >= 0) {
+          setTimeout(() => {
+            if (token !== this._startTokens[domId]) return;
+            if (this._welcomeCloseBtn) {
+              this._welcomeCloseBtn.style.opacity = "1";
+              this._welcomeCloseBtn.style.pointerEvents = "auto";
+            }
+          }, skipOffset * 1000);
+        }
+        
+        this.emit("rendered", {domId, ad});
+        // Không cần gọi _startSkipCountdown ở đây vì đã xử lý closeBtn ở trên
+      };
+      
+      img.onerror = () => {
+        console.error("[AdSDK] Image load error:", img.src);
+        if (token !== this._startTokens[domId]) return;
+        this._track("error", ad.trackingEvents?.error);
+        this.emit("error", {domId, err: new Error(`Image load error: ${img.src}`)});
+        this._renderFallback(domId);
+      };
+      
+      // Click tracking
+      if (ad.clickThrough) {
+        img.addEventListener("click", () => {
+          if (token !== this._startTokens[domId]) return;
+          window.open(ad.clickThrough, "_blank");
+          this._track("click", ad.clickTracking);
+          this.emit("click", {domId, ad});
+        });
+      }
+      return;
+    }
+    
     switch (ad.bannerSource) {
       case "IMG": {
         const img = new Image();
@@ -551,7 +613,7 @@ export default class AdSDK {
           img.style.top = (wrapH - ad.ratioHeight * scale) / 2 + "px";
           
           container.style.position = "relative";
-          container.style.overflow = "hidden";
+          container.style.overflow = "visible";
         };
         
         // Append before applying scale so onload triggers
@@ -928,6 +990,7 @@ export default class AdSDK {
   }
   
   _createWelcomeDom() {
+    // Generate overlay id
     const id = `ad-welcome-${Math.random().toString(36).slice(2, 7)}`;
     const el = document.createElement("div");
     Object.assign(el.style, {
@@ -942,48 +1005,70 @@ export default class AdSDK {
       height: "100vh",
     });
     el.id = id;
-    el.style.opacity = "0";
+    el.style.opacity = "0";  // BẮT ĐẦU VỚI OPACITY = 0
     el.style.transition = "opacity 0.4s ease";
-    requestAnimationFrame(() => {
-      el.style.opacity = "1";
-    });
+    // XÓA requestAnimationFrame ở đây - sẽ fade in từ _renderAd
     
     document.body.appendChild(el);
     
-    const closeBtn = document.createElement("button");
-    closeBtn.innerHTML = "✕";
+    const slotId = `welcome-slot-${Math.random().toString(36).slice(2, 7)}`;
+    const slot = document.createElement("div");
+    slot.id = slotId;
+    Object.assign(slot.style, {
+      width: "50%",
+      height: "50%",
+      maxWidth: "100vw",
+      maxHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      position: "relative",
+      overflow: "visible",
+    });
+    el.appendChild(slot);
+    
+    this._domEls[slotId] = slot;
+    
+    this._welcomeDom = el;
+    this._welcomeSlotId = slotId;
+    
+    const closeBtn = document.createElement("div");
+    closeBtn.innerText = "✕";
     Object.assign(closeBtn.style, {
       position: "absolute",
-      top: "20px",
-      right: "20px",
-      width: "36px",
-      height: "36px",
-      border: "none",
-      borderRadius: "50%",
-      background: "rgba(255,255,255,0.15)",
-      color: "#fff",
-      fontSize: "20px",
+      bottom: "-50px",
+      width: "32px",
+      height: "32px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
       cursor: "pointer",
-      transition: "background 0.2s, transform 0.2s",
+      fontSize: "20px",
+      borderRadius: "50%",
+      background: "rgba(0,0,0,0.5)",
+      color: "#fff",
+      zIndex: "1000000",
+      opacity: "0",
+      transition: "opacity .3s ease",
+      pointerEvents: "none",
     });
     
-    closeBtn.addEventListener("mouseenter", () => {
-      closeBtn.style.background = "rgba(255,255,255,0.3)";
-      closeBtn.style.transform = "scale(1.1)";
-    });
-    closeBtn.addEventListener("mouseleave", () => {
-      closeBtn.style.background = "rgba(255,255,255,0.15)";
-      closeBtn.style.transform = "scale(1)";
+    slot.appendChild(closeBtn);
+    
+    // LƯU REFERENCE closeBtn để truy cập từ _renderAd
+    this._welcomeCloseBtn = closeBtn;
+    
+    closeBtn.addEventListener("click", () => {
+      this._track("skip", this._adData[slotId]?.trackingEvents?.skip);
+      el.style.opacity = "0";
+      setTimeout(() => {
+        el.remove();
+        this._welcomeDom = null;
+        this._welcomeSlotId = null;
+        this._welcomeCloseBtn = null;
+      }, 300);
     });
     
-    closeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      this.emit("close");
-      this.destroy();
-    });
-    
-    el.appendChild(closeBtn);
-    this._welcomeDom = el;
     return el;
   }
   
@@ -1003,9 +1088,6 @@ export default class AdSDK {
         case "destroy":
           this.destroy(data.domId);
           break;
-        case "refresh":
-          this.refresh(data.domId).then();
-          break;
       }
     };
     window.addEventListener("message", this._messageListener);
@@ -1019,7 +1101,7 @@ export default class AdSDK {
   };
   
   static TYPE = {
-    INSTREAM: "INSTREAM",
+    DISPLAY: "DISPLAY",
     OUTSTREAM: "OUTSTREAM",
     WELCOME: "WELCOME",
   };

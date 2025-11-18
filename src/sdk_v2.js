@@ -31,7 +31,7 @@ const ENV = {
 };
 
 const TYPE = {
-  INSTREAM: 'INSTREAM',
+  DISPLAY: 'DISPLAY',
   OUTSTREAM: 'OUTSTREAM',
   WELCOME: 'WELCOME',
   BANNER: 'BANNER'
@@ -206,7 +206,7 @@ class ConfigManager {
       
       // SDK Settings
       env: ENV.SANDBOX,
-      type: TYPE.INSTREAM,
+      type: TYPE.DISPLAY,
       position: null,
       adSize: AD_SIZE.MEDIUM_BANNER,
       bannerType: BANNER_TYPE.DISPLAY,
