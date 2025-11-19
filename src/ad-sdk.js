@@ -468,28 +468,26 @@ export default class AdSDK {
       const buttonSkip = document.createElement("button");
       buttonSkip.className = "banner-close-btn";
       buttonSkip.innerHTML = "✕";
-      buttonSkip.style.cssText = `
-        position:absolute;
-        top:0;
-        right:0;
-        width:20px;
-        height:20px;
-        border:none;
-        border-radius:50%;
-        background:rgba(0,0,0,0.5);
-        color:#fff;
-        font-size:14px;
-        cursor:pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 12px;
-        z-index: 9999;
-        opacity:0;
-        pointer-events:none;
-        transition: opacity 0.3s;
-        transform: translate(50%, -50%);
-      `
+      Object.assign(buttonSkip.style, {
+        position: "absolute",
+        top: "-16px",
+        right: "-16px",
+        width: "32px",
+        height: "32px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        fontSize: "20px",
+        boxShadow: "0px 0px 6.4px 0px #00000080",
+        borderRadius: "50%",
+        background: "#ffffff",
+        color: "#000000",
+        zIndex: "1000000",
+        opacity: "0",
+        transition: "opacity .3s ease",
+        pointerEvents: "none",
+      });
       container.appendChild(buttonSkip);
       buttonSkip.addEventListener("click", () => {
         this.emit("skip", {domId: domId, ad});
