@@ -837,14 +837,14 @@ export default class AdSDK {
         this.emit("error", {domId, err: new Error('Iframe render timeout')});
         this._handleRenderError(domId, isWelcome);
       }
-    }, 3000); // 3 second timeout
+    }, 1000); // 3 second timeout
     
     // Store timeout ID for cleanup
     if (!this._renderTimeouts) this._renderTimeouts = {};
     this._renderTimeouts[domId] = renderTimeout;
     
     // Create overlay click layer ONLY for non-welcome ads
-    if (!isWelcome && ad.clickThrough) {
+    if (ad.clickThrough) {
       const wrapper = document.getElementById(domId);
       wrapper.style.position = "relative";
       
