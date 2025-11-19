@@ -102,6 +102,7 @@ export default class AdSDK {
     this._imgCleanups = {};     // domId -> cleanup for image resize listener
     this._skipTimers = {};      // domId -> skip timer id
     this._renderTimeouts = {};
+    this._overlayDelayInfo = {}
     
     // Optional postMessage API
     if (this.cfg.postMessage) this._initPostMessage();
@@ -186,6 +187,14 @@ export default class AdSDK {
           log(debug, `Fetch result ignored for #${domId} (stale token)`, 'warn');
           throw new Error('stale_fetch');
         }
+        
+        if (bannerType === "OVERLAY" && json?.delayOffSet !== undefined) {
+          this._overlayDelayInfo[domId] = {
+            lastRequestTime: now(),
+            delayOffSet: json.delayOffSet * 1000 // convert to milliseconds
+          };
+          log(debug, `OVERLAY delay tracked for #${domId}: ${json.delayOffSet}s`);
+        }
         return json;
       } catch (err) {
         if (err.message === 'stale_fetch') throw err; // bubble up so start() knows not to show error
@@ -202,8 +211,38 @@ export default class AdSDK {
     return doFetch();
   }
   
+  _checkOverlayDelay(domId, bannerType) {
+    if (bannerType !== "OVERLAY") return true; // No delay check for non-OVERLAY
+    
+    const delayInfo = this._overlayDelayInfo[domId];
+    if (!delayInfo) return true; // First request, no delay
+    
+    const timeSinceLastRequest = now() - delayInfo.lastRequestTime;
+    const remainingDelay = delayInfo.delayOffSet - timeSinceLastRequest;
+    
+    if (remainingDelay > 0) {
+      log(this.cfg.debug, `OVERLAY #${domId} still in delay: ${Math.ceil(remainingDelay / 1000)}s remaining`);
+      return false;
+    }
+    
+    return true;
+  }
+  
   // Start — idempotent per domId: duplicate calls ignored but will force re-render
   async start(domId, bannerType, adSize, positionId) {
+    if (!this._checkOverlayDelay(domId, bannerType)) {
+      const delayInfo = this._overlayDelayInfo[domId];
+      const remainingDelay = Math.ceil((delayInfo.delayOffSet - (now() - delayInfo.lastRequestTime)) / 1000);
+      
+      this.emit("inDelay", {
+        domId,
+        remainingSeconds: remainingDelay,
+        delayOffSet: delayInfo.delayOffSet / 1000
+      });
+      
+      log(this.cfg.debug, `Start blocked for #${domId}: in delay period (${remainingDelay}s remaining)`);
+      return;
+    }
     // Always allow start: re-render fresh view
     if (!domId && this.cfg.type !== AdSDK.TYPE.WELCOME) throw new Error("AdSDK.start(domId) requires a DOM ID");
     
@@ -327,6 +366,8 @@ export default class AdSDK {
       delete this._domEls[domId];
       delete this._adData[domId];
       delete this._startTokens[domId];
+      // NEW: Don't delete delay info on destroy to preserve delay tracking
+      // delete this._overlayDelayInfo[domId];
       
       this.emit("destroy", {domId});
       log(this.cfg.debug, `SDK destroyed view for #${domId} - cleaned up listeners & timers.`);
@@ -339,7 +380,6 @@ export default class AdSDK {
   
   // Hard destroy: full reset (for debugging or full teardown)
   destroyHard() {
-    // remove all view containers
     Object.keys(this._containers).forEach((domId) => {
       try {
         const el = this._domEls[domId] || document.getElementById(domId);
@@ -351,7 +391,6 @@ export default class AdSDK {
       }
     });
     
-    // cleanup all listeners/cleanups/timers
     Object.keys(this._iframeListeners).forEach((k) => {
       window.removeEventListener("message", this._iframeListeners[k]);
     });
@@ -383,6 +422,7 @@ export default class AdSDK {
     this._imgCleanups = {};
     this._skipTimers = {};
     this._startTokens = {};
+    this._overlayDelayInfo = {}; // NEW: Clear delay tracking
     
     if (this._messageListener) {
       window.removeEventListener('message', this._messageListener);

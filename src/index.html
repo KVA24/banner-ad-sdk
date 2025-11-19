@@ -24,7 +24,30 @@
       background: #fff;
     }
     
-    #ad-slot-1, #ad-slot-2, #ad-slot-3 {
+    .input_group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 40px;
+    }
+    
+    .input_each {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      
+      input {
+        padding: 4px;
+      }
+    }
+    
+    .button_group {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    
+    #ad-slot {
       width: 100%;
       height: 245px;
       border: 1px dashed #aaa;
@@ -52,6 +75,7 @@
     }
     
     .muted {
+      margin-top: 8px;
       color: #666;
       font-size: 13px;
     }
@@ -62,23 +86,51 @@
 
 <div class="panel">
   <h3>1) Khung quảng cáo</h3>
-  <div id="ad-slot-1">Ad slot - 1 - URL</div>
-  <div class="muted">Element ID: <code>ad-slot-1</code></div>
-  <div id="ad-slot-2">Ad slot - 2 - IMG</div>
-  <div class="muted">Element ID: <code>ad-slot-2</code></div>
-  <div id="ad-slot-3">Ad slot - 3 - SDK</div>
-  <div class="muted">Element ID: <code>ad-slot-3</code></div>
+  <div id="ad-slot" style="
+    width:100%;height:245px;border:1px dashed #aaa;
+    display:flex;align-items:center;justify-content:center;
+    background:#fafafa;position:relative;">
+    Ad slot
+  </div>
+  
+  <div class="muted">Element ID: <code>ad-slot</code></div>
+  <div class="muted" id="slot-info"></div>
+
 </div>
 
-<div class="panel controls">
-  <h3>2) Thao tác SDK</h3>
-  <button id="btn-start-1">Start ad 1 (sdk.start())</button>
-  <button id="btn-destroy-1">Destroy ad 1 (sdk.destroy())</button>
-  <button id="btn-start-2">Start ad 2 (sdk.start())</button>
-  <button id="btn-destroy-2">Destroy ad 2(sdk.destroy())</button>
-  <button id="btn-start-3">Start ad 3 (sdk.start())</button>
-  <button id="btn-destroy-3">Destroy ad 3 (sdk.destroy())</button>
-  <button id="btn-welcome">Test Welcome</button>
+<div class="panel">
+  <h3>2) Cấu hình quảng cáo</h3>
+  <div class="input_group">
+    <div class="input_each">
+      <label>Stream ID:</label><br/>
+      <input id="input-stream" type="text" style="width:100%;margin-bottom:8px;" placeholder="VD: 123456"/>
+    </div>
+    
+    <div class="input_each">
+      <label>Channel ID:</label><br/>
+      <input id="input-channel" type="text" style="width:100%;margin-bottom:8px;" placeholder="VD: 123456"/>
+    </div>
+    
+    <div class="input_each">
+      <label>Position ID:</label><br/>
+      <input id="input-position" type="text" style="width:100%;margin-bottom:8px;" placeholder="VD: homepage1"
+             value="homepage1"/>
+    </div>
+    
+    <div class="input_each">
+      <label>Banner Type:</label><br/>
+      <select id="select-banner" style="width:100%;margin-bottom:12px;">
+        <option value="LARGE_BANNER" selected>LARGE_BANNER</option>
+        <option value="MEDIUM_BANNER">MEDIUM_BANNER</option>
+      </select>
+    </div>
+  </div>
+  <div class="button_group">
+    <button id="btn-init">Init</button>
+    <button id="btn-start">Start</button>
+    <button id="btn-destroy">Destroy</button>
+    <button id="btn-welcome">Test Welcome</button>
+  </div>
 </div>
 
 <div class="panel">
@@ -150,13 +202,20 @@
           // add logic --- ///
           case 'video-ad-slot':
             switch (ev) {
+              case 'rendered':
+                const el = document.getElementById("video-ad-slot");
+                if (el) {
+                  el.style.pointerEvents = 'auto';
+                  el.style.opacity = '1';
+                  console.log("Banner displayed (rendered OK)");
+                }
+                return;
               case 'skip':
-                const adSlotId = "video-ad-slot";
-                const el = document.getElementById(adSlotId);
-                if (!el) return;
-                el.style.pointerEvents = 'none';
-                el.style.opacity = '0';
-                window.sdk.destroy(adSlotId);
+                const el2 = document.getElementById("video-ad-slot");
+                if (!el2) return;
+                el2.style.pointerEvents = 'none';
+                el2.style.opacity = '0';
+                window.sdk.destroy("video-ad-slot");
               default:
                 return
             }
@@ -164,86 +223,70 @@
       }));
     }
     
-    window.sdk = new AdSDK({
-      env: AdSDK.ENV.SANDBOX,
-      type: AdSDK.TYPE.DISPLAY,
-      debug: true,
-      tenantId: 14,
-      title: "noi dung 1",
-      transId: "111",
-      category: "1, 2",
-      keyword: "1, 2",
-      age: "20",
-      gender: AdSDK.GENDER.MALE,
-      uid20: "",
-    });
-    
-    window.welcomeSdk = new AdSDK({
-      env: AdSDK.ENV.SANDBOX,
-      type: AdSDK.TYPE.WELCOME,
-      debug: true,
-      tenantId: 14,
-      title: "noi dung 1",
-      transId: "111",
-      category: "1, 2",
-      keyword: "1, 2",
-      age: "20",
-      gender: AdSDK.GENDER.MALE,
-      uid20: "",
-    });
-    
-    attachSDKEvents(window.sdk);
-    attachSDKEvents(window.welcomeSdk);
-    log('SDK initialized manually');
-    
-    document.getElementById('btn-start-1').addEventListener('click', () => {
-      if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.start("ad-slot-1", "DISPLAY", "LARGE_BANNER", "homepage1");
-      log('sdk.start() called');
-    });
-    
-    document.getElementById('btn-start-2').addEventListener('click', () => {
-      if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.start("ad-slot-2", "DISPLAY", "LARGE_BANNER", "homepage2");
-      log('sdk.start() called');
-    });
-    
-    document.getElementById('btn-start-3').addEventListener('click', () => {
-      if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.start("ad-slot-3", "DISPLAY", "LARGE_BANNER", "homepage3");
-      log('sdk.start() called');
-    });
-    
-    document.getElementById('btn-destroy-1').addEventListener('click', () => {
-      if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.destroy("ad-slot-1");
-      log('sdk.destroy() called');
-    });
-    
-    document.getElementById('btn-destroy-2').addEventListener('click', () => {
-      if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.destroy("ad-slot-2");
-      log('sdk.destroy() called');
-    });
-    
-    document.getElementById('btn-destroy-3').addEventListener('click', () => {
-      if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.destroy("ad-slot-3");
-      log('sdk.destroy() called');
+    document.getElementById('btn-init').addEventListener('click', () => {
+      const streamId = document.getElementById('input-stream').value.trim();
+      const channelId = document.getElementById('input-channel').value.trim();
+      
+      window.sdk = new AdSDK({
+        env: AdSDK.ENV.SANDBOX,
+        type: AdSDK.TYPE.DISPLAY,
+        debug: true,
+        tenantId: 14,
+        streamId: streamId,
+        channelId: channelId,
+        title: "noi dung 1",
+        transId: "111",
+        category: "1, 2",
+        keyword: "1, 2",
+        age: "20",
+        gender: AdSDK.GENDER.MALE,
+        uid20: "",
+      });
+      
+      window.welcomeSdk = new AdSDK({
+        env: AdSDK.ENV.SANDBOX,
+        type: AdSDK.TYPE.WELCOME,
+        debug: true,
+        tenantId: 14,
+        streamId: streamId,
+        channelId: channelId,
+        title: "noi dung 1",
+        transId: "111",
+        category: "1, 2",
+        keyword: "1, 2",
+        age: "20",
+        gender: AdSDK.GENDER.MALE,
+        uid20: "",
+      });
+      
+      attachSDKEvents(window.sdk);
+      attachSDKEvents(window.welcomeSdk);
+      log('SDK initialized manually');
     })
+    
+    document.getElementById('btn-start').addEventListener('click', () => {
+      const positionId = document.getElementById('input-position').value.trim();
+      const bannerType = document.getElementById('select-banner').value;
+      
+      if (!window.sdk) return log('SDK not ready. Call init first.');
+      window.sdk.start("ad-slot", "DISPLAY", bannerType, positionId);
+      document.getElementById('slot-info').textContent =
+        `Stream ID: ${streamId || "null"}, Channel ID: ${channelId || "null"}, Position ID: ${positionId}, Banner: ${bannerType}`;
+      
+      log('sdk.start() called', window.sdk);
+    });
+    
+    document.getElementById('btn-destroy').addEventListener('click', () => {
+      if (!window.sdk) return log('SDK not ready. Call init first.');
+      window.sdk.destroy("ad-slot");
+      log('sdk.destroy() called');
+    });
     
     document.getElementById('btn-welcome').addEventListener('click', () => {
       if (!window.sdk) return log('SDK not ready. Call init first.');
       window.welcomeSdk.start()
       log('sdk.destroy() called');
     })
-    
-    // Test outer click
-    // document.getElementById('ad-slot').addEventListener('click', () => {
-    //   log('Ad-slot clicked (outer container)');
-    // });
-    
-    // log('Demo ready');
   })();
 </script>
 
@@ -259,8 +302,6 @@
       if (!window.sdk) return;
       const el = document.getElementById(adSlotId);
       if (!el) return;
-      el.style.pointerEvents = 'auto';
-      el.style.opacity = '1';
       window.sdk.start(adSlotId, "OVERLAY", "PAUSE_BANNER");
       console.log('Banner shown (video paused)');
     };
