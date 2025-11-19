@@ -1060,7 +1060,8 @@ export default class AdSDK {
     closeBtn.innerText = "✕";
     Object.assign(closeBtn.style, {
       position: "absolute",
-      bottom: "-50px",
+      top: "-16px",
+      right: "-16px",
       width: "32px",
       height: "32px",
       display: "flex",
@@ -1068,9 +1069,10 @@ export default class AdSDK {
       justifyContent: "center",
       cursor: "pointer",
       fontSize: "20px",
+      boxShadow: "0px 0px 6.4px 0px #00000080",
       borderRadius: "50%",
-      background: "rgba(0,0,0,0.5)",
-      color: "#fff",
+      background: "#ffffff",
+      color: "#000000",
       zIndex: "1000000",
       opacity: "0",
       transition: "opacity .3s ease",
