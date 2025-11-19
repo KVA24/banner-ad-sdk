@@ -837,7 +837,7 @@ export default class AdSDK {
         this.emit("error", {domId, err: new Error('Iframe render timeout')});
         this._handleRenderError(domId, isWelcome);
       }
-    }, 1000); // 3 second timeout
+    }, 2000); // 2 second timeout
     
     // Store timeout ID for cleanup
     if (!this._renderTimeouts) this._renderTimeouts = {};
