@@ -101,6 +101,7 @@ export default class AdSDK {
     this._iframeCleanups = {};  // domId -> cleanup function returned by fitBannerIframe
     this._imgCleanups = {};     // domId -> cleanup for image resize listener
     this._skipTimers = {};      // domId -> skip timer id
+    this._renderTimeouts = {};
     
     // Optional postMessage API
     if (this.cfg.postMessage) this._initPostMessage();
@@ -285,6 +286,11 @@ export default class AdSDK {
         this._welcomeDom = null;
         this._welcomeSlotId = null;
       }
+      
+      if (this._renderTimeouts?.[domId]) {
+        clearTimeout(this._renderTimeouts[domId]);
+        delete this._renderTimeouts[domId];
+      }
       // cleanup iframe listener for that slot
       if (this._iframeListeners?.[domId]) {
         window.removeEventListener("message", this._iframeListeners[domId]);
@@ -349,6 +355,10 @@ export default class AdSDK {
     Object.keys(this._iframeListeners).forEach((k) => {
       window.removeEventListener("message", this._iframeListeners[k]);
     });
+    Object.keys(this._renderTimeouts || {}).forEach((k) => {
+      clearTimeout(this._renderTimeouts[k]);
+    });
+    this._renderTimeouts = {};
     Object.keys(this._iframeCleanups).forEach((k) => {
       try {
         this._iframeCleanups[k]();
@@ -447,24 +457,34 @@ export default class AdSDK {
     }, ad.skipOffSet * 1000);
   }
   
+  // Refactored _renderAd method
   _renderAd(ad, token, domId, bannerType) {
     if (!ad) return this._renderFallback(domId);
+    
     // If token outdated, skip render
     if (token !== this._startTokens[domId]) {
       log(this.cfg.debug, `Render ignored for #${domId} (stale token:${token})`, 'warn');
       return;
     }
-    // ensure container still exists
+    
+    // Ensure container still exists
     const container = this._containers[domId];
     if (!container) {
       log(this.cfg.debug, `Render aborted: container missing for #${domId}`, 'warn');
       return this._renderFallback(domId);
     }
     
-    // clear container content
+    // Clear container content
     container.innerHTML = "";
     
-    if (bannerType === "OVERLAY") {
+    // Initialize _renderTimeouts if not exists
+    if (!this._renderTimeouts) this._renderTimeouts = {};
+    
+    // Determine if this is a Welcome ad
+    const isWelcome = this.cfg.type === AdSDK.TYPE.WELCOME;
+    
+    // Create close button for overlay banner type or welcome ads
+    if (bannerType === "OVERLAY" || isWelcome) {
       const buttonSkip = document.createElement("button");
       buttonSkip.className = "banner-close-btn";
       buttonSkip.innerHTML = "✕";
@@ -479,6 +499,7 @@ export default class AdSDK {
         justifyContent: "center",
         cursor: "pointer",
         fontSize: "20px",
+        border: "none",
         boxShadow: "0px 0px 6.4px 0px #00000080",
         borderRadius: "50%",
         background: "#ffffff",
@@ -489,305 +510,39 @@ export default class AdSDK {
         pointerEvents: "none",
       });
       container.appendChild(buttonSkip);
+      
+      // Store reference for welcome close button
+      if (isWelcome) {
+        this._welcomeCloseBtn = buttonSkip;
+      }
+      
       buttonSkip.addEventListener("click", () => {
         this.emit("skip", {domId: domId, ad});
         this._track("skip", ad.trackingEvents?.skip);
         buttonSkip.style.opacity = "0";
         buttonSkip.style.pointerEvents = "none";
+        
+        // For welcome ads, fade out and destroy the entire overlay
+        if (isWelcome && this._welcomeDom) {
+          this._welcomeDom.style.opacity = "0";
+          setTimeout(() => {
+            this.destroy(domId);
+          }, 300);
+        }
       });
     }
     
-    if (this.cfg.type === AdSDK.TYPE.WELCOME) {
-      const img = new Image();
-      img.src = ad.url;
-      img.style.position = "absolute";
-      img.style.top = "0";
-      img.style.left = "0";
-      img.style.transformOrigin = "top left";
-      img.style.cursor = ad.clickThrough ? "pointer" : "default";
-      
-      // Scale + center image trong container
-      const applyScale = () => {
-        if (!this._containers[domId]) return;
-        const wrapW = container.clientWidth;
-        const wrapH = container.clientHeight;
-        if (!wrapW || !wrapH) return;
-        
-        const scale = Math.min(wrapW / ad.ratioWidth, wrapH / ad.ratioHeight) || 1;
-        
-        img.style.width = ad.ratioWidth + "px";
-        img.style.height = ad.ratioHeight + "px";
-        img.style.transform = `scale(${scale})`;
-        img.style.left = (wrapW - ad.ratioWidth * scale) / 2 + "px";
-        img.style.top = (wrapH - ad.ratioHeight * scale) / 2 + "px";
-        
-        container.style.position = "relative";
-        container.style.overflow = "visible";
-      };
-      
-      // Append before applying scale so onload triggers
-      container.appendChild(img);
-      applyScale();
-      
-      // Auto update khi resize
-      const resizeHandler = () => applyScale();
-      window.addEventListener("resize", resizeHandler);
-      
-      // store cleanup
-      this._imgCleanups[domId] = () => {
-        window.removeEventListener("resize", resizeHandler);
-      };
-      
-      img.onload = () => {
-        if (token !== this._startTokens[domId]) return;
-        if (!this._containers[domId]) return;
-        
-        // ========== HIỆN WELCOME OVERLAY SAU KHI ẢNH LOAD XONG ==========
-        if (this._welcomeDom) {
-          requestAnimationFrame(() => {
-            this._welcomeDom.style.opacity = "1";
-          });
-        }
-        
-        // Bắt đầu đếm ngược cho nút close
-        const skipOffset = ad.skipOffSet || 0;
-        
-        if (this._welcomeCloseBtn && skipOffset >= 0) {
-          setTimeout(() => {
-            if (token !== this._startTokens[domId]) return;
-            if (this._welcomeCloseBtn) {
-              this._welcomeCloseBtn.style.opacity = "1";
-              this._welcomeCloseBtn.style.pointerEvents = "auto";
-            }
-          }, skipOffset * 1000);
-        }
-        
-        this.emit("rendered", {domId, ad});
-        this._track("impression", ad.trackingEvents?.impression);
-        // Không cần gọi _startSkipCountdown ở đây vì đã xử lý closeBtn ở trên
-      };
-      
-      img.onerror = () => {
-        console.error("[AdSDK] Image load error:", img.src);
-        if (token !== this._startTokens[domId]) return;
-        this._track("error", ad.trackingEvents?.error);
-        this.emit("error", {domId, err: new Error(`Image load error: ${img.src}`)});
-        this._renderFallback(domId);
-      };
-      
-      // Click tracking
-      if (ad.clickThrough) {
-        img.addEventListener("click", () => {
-          if (token !== this._startTokens[domId]) return;
-          window.open(ad.clickThrough, "_blank");
-          this._track("click", ad.clickTracking);
-          this.emit("click", {domId, ad});
-        });
-      }
-      return;
-    }
-    
+    // Handle different banner sources
     switch (ad.bannerSource) {
       case "IMG": {
-        const img = new Image();
-        img.src = ad.content;
-        img.style.position = "absolute";  // cần để scale + center
-        img.style.top = "0";
-        img.style.left = "0";
-        img.style.transformOrigin = "top left";
-        img.style.cursor = ad.clickThrough ? "pointer" : "default";
-        
-        // Scale + center image trong container
-        const applyScale = () => {
-          if (!this._containers[domId]) return;
-          const wrapW = container.clientWidth;
-          const wrapH = container.clientHeight;
-          if (!wrapW || !wrapH) return;
-          
-          const scale = Math.min(wrapW / ad.ratioWidth, wrapH / ad.ratioHeight) || 1;
-          
-          img.style.width = ad.ratioWidth + "px";
-          img.style.height = ad.ratioHeight + "px";
-          img.style.transform = `scale(${scale})`;
-          img.style.left = (wrapW - ad.ratioWidth * scale) / 2 + "px";
-          img.style.top = (wrapH - ad.ratioHeight * scale) / 2 + "px";
-          
-          container.style.position = "relative";
-          container.style.overflow = "visible";
-        };
-        
-        // Append before applying scale so onload triggers
-        container.appendChild(img);
-        applyScale();
-        
-        // Auto update khi resize
-        const resizeHandler = () => applyScale();
-        window.addEventListener("resize", resizeHandler);
-        
-        // store cleanup
-        this._imgCleanups[domId] = () => {
-          window.removeEventListener("resize", resizeHandler);
-        };
-        
-        img.onload = () => {
-          if (token !== this._startTokens[domId]) return;
-          if (!this._containers[domId]) return;
-          this.emit("rendered", {domId, ad});
-          this._track("impression", ad.trackingEvents?.impression);
-          this._startSkipCountdown(token, domId, ad);
-        };
-        
-        img.onerror = () => {
-          console.error("[AdSDK] Image load error:", img.src);
-          if (token !== this._startTokens[domId]) return;
-          this._track("error", ad.trackingEvents?.error);
-          this.emit("error", {domId, err: new Error(`Image load error: ${img.src}`)});
-          this._renderFallback(domId);
-        };
-        
-        // Click tracking
-        if (ad.clickThrough) {
-          img.addEventListener("click", () => {
-            if (token !== this._startTokens[domId]) return;
-            window.open(ad.clickThrough, "_blank");
-            this._track("click", ad.clickTracking);
-            this.emit("click", {domId, ad});
-          });
-        }
-        
+        this._renderImageAd(ad, token, domId, container, isWelcome);
         break;
       }
       
       case "URL":
       case "HTML":
       case "SDK": {
-        if (token !== this._startTokens[domId]) return;
-        
-        container.style.overflow = "visible";
-        
-        const iframe = document.createElement("iframe");
-        iframe.style.border = "none";
-        iframe.sandbox = "allow-scripts allow-same-origin allow-popups allow-top-navigation-by-user-activation";
-        
-        // Safe set src/srcdoc only once
-        try {
-          const url = new URL(ad.content);
-          iframe.src = url.href;
-        } catch (err) {
-          // treat as html => use srcdoc
-          iframe.srcdoc = ad.content;
-        }
-        
-        // optional width/height attrs (numbers or empty)
-        if (ad.ratioWidth) iframe.width = ad.ratioWidth;
-        if (ad.ratioHeight) iframe.height = ad.ratioHeight;
-        
-        container.appendChild(iframe);
-        
-        // Fit banner into slot and store cleanup
-        const cleanupFit = this.fitBannerIframe(container, iframe, iframe.width || (ad.ratioWidth || 300), iframe.height || (ad.ratioHeight || 250));
-        if (this._iframeCleanups[domId]) {
-          try {
-            this._iframeCleanups[domId]();
-          } catch (e) {
-          }
-        }
-        this._iframeCleanups[domId] = cleanupFit;
-        
-        // Ensure only one message listener per domId, and it is properly scoped
-        if (this._iframeListeners[domId]) {
-          // remove old
-          try {
-            window.removeEventListener("message", this._iframeListeners[domId]);
-          } catch (e) {
-          }
-          delete this._iframeListeners[domId];
-        }
-        
-        // listener for iframe messages (only handle messages that include domId)
-        this._iframeListeners[domId] = (e) => {
-          const d = e.data;
-          
-          console.log('[AdSDK Debug] Message received:', {
-            origin: e.origin,
-            data: d,
-            expectedDomId: domId,
-            expectedChannel: this.cfg.postMessageChannel
-          });
-          
-          if (!d) {
-            console.log('[AdSDK Debug] No data in message');
-            return;
-          }
-          
-          if (d.channel && d.channel !== this.cfg.postMessageChannel) {
-            console.log('[AdSDK Debug] Wrong channel:', d.channel, 'expected:', this.cfg.postMessageChannel);
-            return;
-          }
-          
-          // if domId provided in message, filter by it
-          if (d.domId && d.domId !== domId) {
-            console.log('[AdSDK Debug] Wrong domId:', d.domId, 'expected:', domId);
-            return;
-          }
-          
-          // handle render-ready signals from iframe
-          if (d.imageLoaded || d.type === "RENDERED" || d.event === "rendered" || d.action === "ADS_LOADED") {
-            console.log('[AdSDK Debug] ✅ RENDERED signal detected!');
-            if (token !== this._startTokens[domId]) {
-              console.log('[AdSDK Debug] Token mismatch, ignoring');
-              return;
-            }
-            this.emit("rendered", {domId, ad});
-            this._track("impression", ad.trackingEvents?.impression);
-            this._startSkipCountdown(token, domId, ad);
-          } else {
-            console.log('[AdSDK Debug] ⚠️ Message not recognized as RENDERED signal');
-          }
-        };
-        
-        // register listener
-        window.addEventListener("message", this._iframeListeners[domId]);
-        console.log('[AdSDK Debug] Listener registered for domId:', domId);
-        
-        // onload fallback: if iframe doesn't post imageLoaded, still emit rendered
-        // iframe.onload = () => {
-        //   try {
-        //     if (token !== this._startTokens[domId]) return;
-        //     // Do not auto-emit here if we expect imageLoaded from iframe — but safe fallback:
-        //     this.emit("rendered", {domId, ad});
-        //     this._startSkipCountdown(token, domId, ad);
-        //   } catch (err) {
-        //     // ignore
-        //     this.emit("rendered", {domId, ad});
-        //     this._startSkipCountdown(token, domId, ad);
-        //   }
-        // };
-        
-        // Tạo overlay click cho container
-        const wrapper = document.getElementById(domId);
-        wrapper.style.position = "relative";
-        
-        const clickLayer = document.createElement("div");
-        clickLayer.className = "ad-click-layer-" + domId;
-        clickLayer.style.cssText = `
-            position:absolute;
-            inset:0;
-            z-index:9998;
-            cursor:pointer;
-            background:rgba(0,0,0,0);
-        `;
-        
-        // CLICK HANDLER
-        clickLayer.addEventListener("click", (e) => {
-          e.stopPropagation();
-          window.open(ad.clickThrough, "_blank");
-          this._track("click", ad.clickTracking);
-          this.emit("click", {domId, ad});
-        });
-        
-        wrapper.appendChild(clickLayer);
-        
+        this._renderIframeAd(ad, token, domId, container, isWelcome);
         break;
       }
       
@@ -801,14 +556,335 @@ export default class AdSDK {
           .catch((err) => {
             console.error("[AdSDK] VAST render error:", err);
             if (token !== this._startTokens[domId]) return;
-            this._renderFallback(domId);
             this.emit("error", {domId, err});
+            this._handleRenderError(domId, isWelcome);
           });
         break;
       }
       
       default:
         this._renderFallback(domId);
+    }
+  }
+
+// Extract image rendering logic
+  _renderImageAd(ad, token, domId, container, isWelcome) {
+    const img = new Image();
+    img.src = isWelcome ? ad.url : ad.content;
+    img.style.position = "absolute";
+    img.style.top = "0";
+    img.style.left = "0";
+    img.style.transformOrigin = "top left";
+    img.style.cursor = ad.clickThrough ? "pointer" : "default";
+    
+    // Scale + center image in container
+    const applyScale = () => {
+      if (!this._containers[domId]) return;
+      const wrapW = container.clientWidth;
+      const wrapH = container.clientHeight;
+      if (!wrapW || !wrapH) return;
+      
+      const scale = Math.min(wrapW / ad.ratioWidth, wrapH / ad.ratioHeight) || 1;
+      
+      img.style.width = ad.ratioWidth + "px";
+      img.style.height = ad.ratioHeight + "px";
+      img.style.transform = `scale(${scale})`;
+      img.style.left = (wrapW - ad.ratioWidth * scale) / 2 + "px";
+      img.style.top = (wrapH - ad.ratioHeight * scale) / 2 + "px";
+      
+      container.style.position = "relative";
+      container.style.overflow = "visible";
+    };
+    
+    // Append before applying scale so onload triggers
+    container.appendChild(img);
+    applyScale();
+    
+    // Auto update on resize
+    const resizeHandler = () => applyScale();
+    window.addEventListener("resize", resizeHandler);
+    
+    // Store cleanup
+    this._imgCleanups[domId] = () => {
+      window.removeEventListener("resize", resizeHandler);
+    };
+    
+    img.onload = () => {
+      if (token !== this._startTokens[domId]) return;
+      if (!this._containers[domId]) return;
+      
+      // For welcome ads, show the overlay after image loads
+      if (isWelcome && this._welcomeDom) {
+        requestAnimationFrame(() => {
+          this._welcomeDom.style.opacity = "1";
+        });
+      }
+      
+      // Start skip countdown
+      const skipOffset = ad.skipOffSet || 0;
+      if (skipOffset >= 0) {
+        const closeBtn = isWelcome ? this._welcomeCloseBtn : container.querySelector('.banner-close-btn');
+        if (closeBtn) {
+          setTimeout(() => {
+            if (token !== this._startTokens[domId]) return;
+            closeBtn.style.opacity = "1";
+            closeBtn.style.pointerEvents = "auto";
+          }, skipOffset * 1000);
+        }
+      }
+      
+      this.emit("rendered", {domId, ad});
+      this._track("impression", ad.trackingEvents?.impression);
+    };
+    
+    img.onerror = () => {
+      console.error("[AdSDK] Image load error:", img.src);
+      if (token !== this._startTokens[domId]) return;
+      this._track("error", ad.trackingEvents?.error);
+      this.emit("error", {domId, err: new Error(`Image load error: ${img.src}`)});
+      this._handleRenderError(domId, isWelcome);
+    };
+    
+    // Click tracking
+    if (ad.clickThrough) {
+      img.addEventListener("click", () => {
+        if (token !== this._startTokens[domId]) return;
+        window.open(ad.clickThrough, "_blank");
+        this._track("click", ad.clickTracking);
+        this.emit("click", {domId, ad});
+      });
+    }
+  }
+
+// Extract iframe rendering logic
+  _renderIframeAd(ad, token, domId, container, isWelcome) {
+    if (token !== this._startTokens[domId]) return;
+    
+    container.style.overflow = "visible";
+    
+    const iframe = document.createElement("iframe");
+    iframe.style.border = "none";
+    iframe.sandbox = "allow-scripts allow-same-origin allow-popups allow-top-navigation-by-user-activation";
+    
+    // Add unique data attribute to identify this iframe
+    const iframeId = `iframe-${domId}-${token}`;
+    iframe.setAttribute('data-ad-iframe-id', iframeId);
+    
+    // For Welcome ads, content is in ad.url, for others in ad.content
+    const contentSource = isWelcome ? ad.url : ad.content;
+    
+    if (!contentSource) {
+      console.error('[AdSDK] No content source for iframe ad');
+      this.emit("error", {domId, err: new Error('No content source')});
+      this._handleRenderError(domId, isWelcome);
+      return;
+    }
+    
+    // Safe set src/srcdoc only once
+    try {
+      const url = new URL(contentSource);
+      iframe.src = url.href;
+    } catch (err) {
+      // treat as html => use srcdoc
+      iframe.srcdoc = contentSource;
+    }
+    
+    // Optional width/height attrs (numbers or empty)
+    if (ad.ratioWidth) iframe.width = ad.ratioWidth;
+    if (ad.ratioHeight) iframe.height = ad.ratioHeight;
+    
+    container.appendChild(iframe);
+    
+    // Fit banner into slot and store cleanup
+    const cleanupFit = this.fitBannerIframe(
+      container,
+      iframe,
+      iframe.width || (ad.ratioWidth || 300),
+      iframe.height || (ad.ratioHeight || 250)
+    );
+    if (this._iframeCleanups[domId]) {
+      try {
+        this._iframeCleanups[domId]();
+      } catch (e) {
+      }
+    }
+    this._iframeCleanups[domId] = cleanupFit;
+    
+    // Track if this slot has already rendered to prevent duplicate impressions
+    let hasRendered = false;
+    
+    // Ensure only one message listener per domId
+    if (this._iframeListeners[domId]) {
+      try {
+        window.removeEventListener("message", this._iframeListeners[domId]);
+      } catch (e) {
+      }
+      delete this._iframeListeners[domId];
+    }
+    
+    // Listener for iframe messages
+    this._iframeListeners[domId] = (e) => {
+      const d = e.data;
+      
+      console.log('[AdSDK Debug] Message received:', {
+        origin: e.origin,
+        data: d,
+        expectedDomId: domId,
+        expectedChannel: this.cfg.postMessageChannel,
+        hasRendered: hasRendered,
+        isWelcome: isWelcome,
+        iframeContentWindow: iframe.contentWindow,
+        messageSource: e.source,
+        sourceMatches: e.source === iframe.contentWindow
+      });
+      
+      if (!d) {
+        console.log('[AdSDK Debug] No data in message');
+        return;
+      }
+      
+      if (d.channel && d.channel !== this.cfg.postMessageChannel) {
+        console.log('[AdSDK Debug] Wrong channel:', d.channel, 'expected:', this.cfg.postMessageChannel);
+        return;
+      }
+      
+      // IMPORTANT: Check if message is from THIS specific iframe
+      // Method 1: Check if domId matches (if provided in message)
+      if (d.domId && d.domId !== domId) {
+        console.log('[AdSDK Debug] Wrong domId:', d.domId, 'expected:', domId);
+        return;
+      }
+      
+      // Method 2: Check if iframe source matches message source
+      // Note: For welcome ads, iframe might not be fully loaded yet when message arrives
+      if (e.source && iframe.contentWindow && e.source !== iframe.contentWindow) {
+        console.log('[AdSDK Debug] Message not from this iframe, source mismatch');
+        return;
+      }
+      
+      // Prevent duplicate impressions
+      if (hasRendered) {
+        console.log('[AdSDK Debug] Already rendered, ignoring duplicate message');
+        return;
+      }
+      
+      // Handle render-ready signals from iframe
+      if (d.imageLoaded || d.type === "RENDERED" || d.event === "rendered" || d.action === "ADS_LOADED") {
+        console.log('[AdSDK Debug] ✅ RENDERED signal detected for domId:', domId, 'isWelcome:', isWelcome);
+        if (token !== this._startTokens[domId]) {
+          console.log('[AdSDK Debug] Token mismatch, ignoring');
+          return;
+        }
+        
+        // Mark as rendered
+        hasRendered = true;
+        
+        // Clear render timeout since we got the message
+        if (this._renderTimeouts && this._renderTimeouts[domId]) {
+          console.log('[AdSDK Debug] Clearing timeout for domId:', domId);
+          clearTimeout(this._renderTimeouts[domId]);
+          delete this._renderTimeouts[domId];
+        }
+        
+        // For welcome ads, show the overlay after iframe renders
+        if (isWelcome && this._welcomeDom) {
+          console.log('[AdSDK Debug] Fading in welcome overlay');
+          requestAnimationFrame(() => {
+            this._welcomeDom.style.opacity = "1";
+          });
+        }
+        
+        this.emit("rendered", {domId, ad});
+        this._track("impression", ad.trackingEvents?.impression);
+        this._startSkipCountdown(token, domId, ad);
+      } else {
+        console.log('[AdSDK Debug] ⚠️ Message not recognized as RENDERED signal, data:', d);
+      }
+    };
+    
+    // Register listener
+    window.addEventListener("message", this._iframeListeners[domId]);
+    console.log('[AdSDK Debug] Listener registered for domId:', domId);
+    
+    // Timeout: if no message received within timeout, treat as error
+    const renderTimeout = setTimeout(() => {
+      console.log('[AdSDK Debug] Timeout fired for domId:', domId, {
+        token: token,
+        currentToken: this._startTokens[domId],
+        hasRendered: hasRendered,
+        isWelcome: isWelcome,
+        welcomeDomExists: !!this._welcomeDom,
+        welcomeDomOpacity: this._welcomeDom?.style.opacity
+      });
+      
+      if (token !== this._startTokens[domId]) return;
+      
+      // Check if already rendered
+      if (hasRendered) {
+        console.log('[AdSDK Debug] Timeout but already rendered, ignoring');
+        return;
+      }
+      
+      const alreadyRendered = isWelcome
+        ? (this._welcomeDom && this._welcomeDom.style.opacity === "1")
+        : false;
+      
+      if (!alreadyRendered) {
+        console.error('[AdSDK] ❌ Iframe render timeout - no message received for domId:', domId, 'isWelcome:', isWelcome);
+        console.log('[AdSDK Debug] iframe.src:', iframe.src || 'N/A');
+        console.log('[AdSDK Debug] iframe.srcdoc:', iframe.srcdoc ? iframe.srcdoc.substring(0, 200) + '...' : 'N/A');
+        this._track("error", ad.trackingEvents?.error);
+        this.emit("error", {domId, err: new Error('Iframe render timeout')});
+        this._handleRenderError(domId, isWelcome);
+      }
+    }, 3000); // 3 second timeout
+    
+    // Store timeout ID for cleanup
+    if (!this._renderTimeouts) this._renderTimeouts = {};
+    this._renderTimeouts[domId] = renderTimeout;
+    
+    // Create overlay click layer ONLY for non-welcome ads
+    if (!isWelcome && ad.clickThrough) {
+      const wrapper = document.getElementById(domId);
+      wrapper.style.position = "relative";
+      
+      const clickLayer = document.createElement("div");
+      clickLayer.className = "ad-click-layer-" + domId;
+      clickLayer.style.cssText = `
+      position:absolute;
+      inset:0;
+      z-index:9998;
+      cursor:pointer;
+      background:rgba(0,0,0,0);
+    `;
+      
+      // CLICK HANDLER
+      clickLayer.addEventListener("click", (e) => {
+        e.stopPropagation();
+        window.open(ad.clickThrough, "_blank");
+        this._track("click", ad.clickTracking);
+        this.emit("click", {domId, ad});
+      });
+      
+      wrapper.appendChild(clickLayer);
+    }
+  }
+
+// Handle render errors (destroy for welcome, fallback for others)
+  _handleRenderError(domId, isWelcome) {
+    if (isWelcome) {
+      // For welcome ads, destroy the entire overlay on error
+      if (this._welcomeDom) {
+        this._welcomeDom.style.opacity = "0";
+        setTimeout(() => {
+          this.destroy(domId);
+        }, 300);
+      } else {
+        this.destroy(domId);
+      }
+    } else {
+      // For regular ads, show fallback
+      this._renderFallback(domId);
     }
   }
   
