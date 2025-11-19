@@ -1039,8 +1039,8 @@ export default class AdSDK {
     const slot = document.createElement("div");
     slot.id = slotId;
     Object.assign(slot.style, {
-      width: "60%",
-      height: "50%",
+      width: "600px",
+      height: "500px",
       maxWidth: "100vw",
       maxHeight: "100vh",
       display: "flex",
