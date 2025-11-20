@@ -477,24 +477,92 @@ export default class AdSDK {
     };
   }
   
-  _startSkipCountdown(token, domId, ad) {
+  _startSkipCountdown(token, domId, ad, isWelcome) {
     // clear old
     if (this._skipTimers?.[domId]) {
       clearTimeout(this._skipTimers[domId]);
       this._skipTimers[domId] = null;
     }
     
+    const skipTime = (isWelcome ? ad.skipOffset : ad.skipOffSet) || 0
+    
     // Không có skipOffset => không làm gì
-    if (!ad || ad.skipOffSet < 0) return;
+    if (!skipTime) return;
+    
+    // Chỉ thêm countdown text cho welcome ads
+    let countdownText = null;
+    if (isWelcome) {
+      const container = this._containers[domId];
+      if (container) {
+        countdownText = document.createElement("div");
+        countdownText.className = "skip-countdown-text";
+        countdownText.textContent = `Bỏ qua sau ${skipTime} giây`;
+        Object.assign(countdownText.style, {
+          position: "absolute",
+          bottom: "10px",
+          right: "10px",
+          background: "rgba(0,0,0,0.7)",
+          color: "#ffffff",
+          padding: "8px 12px",
+          borderRadius: "4px",
+          fontSize: "14px",
+          fontWeight: "500",
+          zIndex: "1000001",
+          pointerEvents: "none",
+          transition: "opacity 0.3s ease"
+        });
+        container.appendChild(countdownText);
+        
+        // Countdown interval
+        let remainingTime = skipTime;
+        const countdownInterval = setInterval(() => {
+          if (token !== this._startTokens[domId]) {
+            clearInterval(countdownInterval);
+            if (countdownText && countdownText.parentNode) {
+              countdownText.remove();
+            }
+            return;
+          }
+          
+          remainingTime--;
+          if (remainingTime > 0) {
+            countdownText.textContent = `Bỏ qua sau ${remainingTime} giây`;
+          } else {
+            clearInterval(countdownInterval);
+            // Ẩn text khi countdown về 0
+            if (countdownText) {
+              countdownText.style.opacity = "0";
+              setTimeout(() => {
+                if (countdownText && countdownText.parentNode) {
+                  countdownText.remove();
+                }
+              }, 300);
+            }
+          }
+        }, 1000);
+      }
+    }
     
     // Setup timer new
     this._skipTimers[domId] = setTimeout(() => {
       if (token !== this._startTokens[domId]) return;
+      
+      // Hiện nút close
       if (document.getElementById(domId).querySelector('.banner-close-btn')) {
         document.getElementById(domId).querySelector('.banner-close-btn').style.opacity = "1";
         document.getElementById(domId).querySelector('.banner-close-btn').style.pointerEvents = "auto";
       }
-    }, ad.skipOffSet * 1000);
+      
+      // Đảm bảo text đã bị xóa
+      if (countdownText && countdownText.parentNode) {
+        countdownText.style.opacity = "0";
+        setTimeout(() => {
+          if (countdownText && countdownText.parentNode) {
+            countdownText.remove();
+          }
+        }, 300);
+      }
+    }, skipTime * 1000);
   }
   
   // Refactored _renderAd method
@@ -660,20 +728,8 @@ export default class AdSDK {
         });
       }
       
-      // Start skip countdown
-      const skipOffset = ad.skipOffSet || 0;
-      if (skipOffset >= 0) {
-        const closeBtn = isWelcome ? this._welcomeCloseBtn : container.querySelector('.banner-close-btn');
-        if (closeBtn) {
-          setTimeout(() => {
-            if (token !== this._startTokens[domId]) return;
-            closeBtn.style.opacity = "1";
-            closeBtn.style.pointerEvents = "auto";
-          }, skipOffset * 1000);
-        }
-      }
-      
       this.emit("rendered", {domId, ad});
+      this._startSkipCountdown(token, domId, ad, isWelcome);
       this._track("impression", ad.trackingEvents?.impression);
     };
     
@@ -835,8 +891,8 @@ export default class AdSDK {
         }
         
         this.emit("rendered", {domId, ad});
+        this._startSkipCountdown(token, domId, ad, isWelcome);
         this._track("impression", ad.trackingEvents?.impression);
-        this._startSkipCountdown(token, domId, ad);
       } else {
         console.log('[AdSDK Debug] ⚠️ Message not recognized as RENDERED signal, data:', d);
       }
