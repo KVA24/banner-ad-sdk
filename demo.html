@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang='vi'>
+<head>
+  <meta charset='utf-8'/>
+  <meta name='viewport' content='width=device-width,initial-scale=1'/>
+  <title>Banner 1120</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    
+    #full-image {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      user-select: none;
+      -webkit-user-drag: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+  </style>
+</head>
+<body>
+
+<img id='full-image' src='https://dev-static1.wiinvent.tv/2025/11/19/image1120_1763532760105.png'
+     alt='Full screen image'/>
+
+<script>
+  (function () {
+    const img = document.getElementById('full-image');
+    
+    function postMessageAll(payload) {
+      console.log('[Banner] Sending message:', payload);  // 👉 Log message trước khi gửi
+      
+      try {
+        window.parent.postMessage(payload, '*');
+      } catch (e) {
+        console.warn('[Banner] parent.postMessage error:', e);
+      }
+      
+      try {
+        if (window.Android?.postMessage) {
+          window.Android.postMessage(JSON.stringify(payload));
+        }
+      } catch (e) {
+        console.warn('[Banner] Android.postMessage error:', e);
+      }
+      
+      try {
+        if (window.webkit?.messageHandlers?.adSdkHandler) {
+          window.webkit.messageHandlers.adSdkHandler.postMessage(payload);
+        }
+      } catch (e) {
+        console.warn('[Banner] webkit.postMessage error:', e);
+      }
+    }
+    
+    function notifyLoaded() {
+      const payload = {
+        action: 'ADS_LOADED',
+        imageLoaded: true,
+        src: img.src
+      };
+      postMessageAll(payload);
+    }
+    
+    function notifyError() {
+      const payload = {
+        action: 'ADS_ERROR',
+        imageLoaded: false,
+        error: true,
+        src: img.src
+      };
+      postMessageAll(payload);
+    }
+    
+    function notifyLoadedWithDelay() {
+      setTimeout(() => {
+        notifyLoaded();
+      }, 2000);
+    }
+    
+    if (img.complete && img.naturalWidth > 0) {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(notifyLoadedWithDelay)
+      );
+    } else {
+      img.addEventListener('load', () => {
+        console.log('[Banner] Image loaded successfully');
+        requestAnimationFrame(notifyLoadedWithDelay);
+      }, {once: true});
+      
+      img.addEventListener('error', () => {
+        console.log('[Banner] Image failed to load');
+        notifyError();
+      }, {once: true});
+    }
+    
+    img.addEventListener('dragstart', (e) => e.preventDefault());
+  })();
+</script>
+
+</body>
+</html>

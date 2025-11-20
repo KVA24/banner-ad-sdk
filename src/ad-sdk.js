@@ -311,7 +311,7 @@ export default class AdSDK {
   }
   
   // Destroy — view-only: do NOT reset SDK internals like other slots
-  destroy(domId) {
+  dismiss(domId) {
     const wrapper = document.getElementById(domId);
     const layer = wrapper.querySelector(".ad-click-layer-" + domId);
     if (layer) layer.remove();
@@ -369,17 +369,17 @@ export default class AdSDK {
       // NEW: Don't delete delay info on destroy to preserve delay tracking
       // delete this._overlayDelayInfo[domId];
       
-      this.emit("destroy", {domId});
+      this.emit("dismiss", {domId});
       log(this.cfg.debug, `SDK destroyed view for #${domId} - cleaned up listeners & timers.`);
       return;
     }
     
     // no domId -> remove all view slots
-    Object.keys(this._containers).forEach((id) => this.destroy(id));
+    Object.keys(this._containers).forEach((id) => this.dismiss(id));
   }
   
   // Hard destroy: full reset (for debugging or full teardown)
-  destroyHard() {
+  destroy() {
     Object.keys(this._containers).forEach((domId) => {
       try {
         const el = this._domEls[domId] || document.getElementById(domId);
@@ -432,7 +432,7 @@ export default class AdSDK {
     this._started = false;
     this._handlers = {};
     
-    this.emit('destroyFull');
+    this.emit('destroy');
     log(this.cfg.debug, 'SDK fully reset (destroyHard).');
   }
   
@@ -566,7 +566,7 @@ export default class AdSDK {
         if (isWelcome && this._welcomeDom) {
           this._welcomeDom.style.opacity = "0";
           setTimeout(() => {
-            this.destroy(domId);
+            this.dismiss(domId);
           }, 300);
         }
       });
@@ -877,7 +877,7 @@ export default class AdSDK {
         this.emit("error", {domId, err: new Error('Iframe render timeout')});
         this._handleRenderError(domId, isWelcome);
       }
-    }, 2000); // 2 second timeout
+    }, 3000);
     
     // Store timeout ID for cleanup
     if (!this._renderTimeouts) this._renderTimeouts = {};
@@ -917,10 +917,10 @@ export default class AdSDK {
       if (this._welcomeDom) {
         this._welcomeDom.style.opacity = "0";
         setTimeout(() => {
-          this.destroy(domId);
+          this.dismiss(domId);
         }, 300);
       } else {
-        this.destroy(domId);
+        this.dismiss(domId);
       }
     } else {
       // For regular ads, show fallback
@@ -1053,7 +1053,7 @@ export default class AdSDK {
             if (token !== this._startTokens[domId]) return;
             this.emit("vast_skipped", {domId});
             this._track("video_skip");
-            this._fadeOut(wrapper, () => this.destroy(domId));
+            this._fadeOut(wrapper, () => this.dismiss(domId));
           });
         }
       }, 1000);
@@ -1071,7 +1071,7 @@ export default class AdSDK {
       if (token !== this._startTokens[domId]) return;
       this._track("video_complete");
       this._fadeOut(wrapper, () => {
-        if (this.cfg.type === "WELCOME") this.destroy(domId);
+        if (this.cfg.type === "WELCOME") this.dismiss(domId);
       });
     };
     
@@ -1225,8 +1225,8 @@ export default class AdSDK {
           // render a provided payload into a provided domId
           this._renderAd(data.payload, this._startTokens[data.domId] || 0, data.domId);
           break;
-        case "destroy":
-          this.destroy(data.domId);
+        case "dismiss":
+          this.dismiss(data.domId);
           break;
       }
     };
