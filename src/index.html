@@ -55,7 +55,6 @@
       align-items: center;
       justify-content: center;
       background: #fafafa;
-      position: relative;
     }
     
     .log {
@@ -86,11 +85,13 @@
 
 <div class="panel">
   <h3>1) Khung quảng cáo</h3>
-  <div id="ad-slot" style="
+  <div class="ad-controls" style="position:relative;width:100%;height:245px">
+    <div id="ad-slot" style="
     width:100%;height:245px;border:1px dashed #aaa;
     display:flex;align-items:center;justify-content:center;
-    background:#fafafa;opacity: 0">
-    Ad slot
+    background:#fafafa;opacity: 0;inset:0;">
+      Ad slot
+    </div>
   </div>
   
   <div class="muted">Element ID: <code>ad-slot</code></div>
@@ -144,7 +145,7 @@
     <!-- Banner rectangle near progress bar -->
     <div id="video-ad-slot" style="
       position:absolute;
-      bottom:200px;
+      bottom:80px;
       left:50%;
       transform:translateX(-50%);
       width:780px;
@@ -171,7 +172,7 @@
 
 <!-- Load SDK -->
 <script src="/dist/ad-sdk.min.js"></script>
-<!--<script src="https://cdn.jsdelivr.net/gh/KVA24/banner-ad-sdk@1.1.0/dist/ad-sdk.min.js"></script>-->
+<!--<script src="https://cdn.jsdelivr.net/gh/KVA24/banner-ad-sdk@1.1.1/dist/ad-sdk.min.js"></script>-->
 
 <script>
   (function () {

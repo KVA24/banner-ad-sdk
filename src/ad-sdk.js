@@ -461,7 +461,7 @@ export default class AdSDK {
       iframe.style.left = (wrapW - originalW * scale) / 2 + "px";
       iframe.style.top = (wrapH - originalH * scale) / 2 + "px";
       
-      wrapper.style.position = "absolute";
+      wrapper.style.position = "relative";
       wrapper.style.overflow = "visible";
     };
     
@@ -942,7 +942,7 @@ export default class AdSDK {
     // Create overlay click layer ONLY for non-welcome ads
     if (ad.clickThrough) {
       const wrapper = document.getElementById(domId);
-      wrapper.style.position = "relative";
+      wrapper.style.position = "absolute";
       
       const clickLayer = document.createElement("div");
       clickLayer.className = "ad-click-layer-" + domId;
