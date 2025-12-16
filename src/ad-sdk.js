@@ -461,7 +461,7 @@ export default class AdSDK {
       iframe.style.left = (wrapW - originalW * scale) / 2 + "px";
       iframe.style.top = (wrapH - originalH * scale) / 2 + "px";
       
-      wrapper.style.position = "relative";
+      wrapper.style.position = "absolute";
       wrapper.style.overflow = "visible";
     };
     
