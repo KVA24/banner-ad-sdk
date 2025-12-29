@@ -1,5 +1,6 @@
 // src/ad-sdk.fixed.js
-// Ad SDK — patched: support multi-slot, per-slot tokens, per-slot cleanup, single proper listener handling, no double-src
+// Ad SDK – patched: support multi-slot, per-slot tokens, per-slot cleanup, single proper listener handling, no double-src
+// UPDATED: Added callback support for start() method
 import md5 from "crypto-js/md5";
 
 // ---- Utils ----
@@ -89,20 +90,23 @@ export default class AdSDK {
     
     // Internal state
     this._handlers = {};
-    this._started = false; // indicates SDK has been started at least once
-    this._adData = {}; // per-domId ad data
+    this._started = false;
+    this._adData = {};
     this._messageListener = null;
     
     // Support multiple DOM slots
-    this._containers = {};      // domId -> container element
-    this._domEls = {};          // domId -> wrapper DOM element (the element passed to start)
-    this._startTokens = {};     // domId -> token number to avoid races
-    this._iframeListeners = {}; // domId -> message handler for clicks / events
-    this._iframeCleanups = {};  // domId -> cleanup function returned by fitBannerIframe
-    this._imgCleanups = {};     // domId -> cleanup for image resize listener
-    this._skipTimers = {};      // domId -> skip timer id
+    this._containers = {};
+    this._domEls = {};
+    this._startTokens = {};
+    this._iframeListeners = {};
+    this._iframeCleanups = {};
+    this._imgCleanups = {};
+    this._skipTimers = {};
     this._renderTimeouts = {};
-    this._overlayDelayInfo = {}
+    this._overlayDelayInfo = {};
+    
+    // NEW: Store callbacks per domId
+    this._callbacks = {};
     
     // Optional postMessage API
     if (this.cfg.postMessage) this._initPostMessage();
@@ -169,7 +173,7 @@ export default class AdSDK {
   async _fetchAd(domId, token, bannerType, adSize, positionId) {
     const {sign, salt, deviceId} = this._sign(positionId, this.cfg.tenantId);
     const {fetchUrl, position, fetchTimeout, fetchRetries, fetchBackoff, debug} = this.cfg;
-    const url = `${fetchUrl}&si=${sign}&bt=${bannerType || ""}&as=${adSize || ""}&pid=${positionId || ""}`; // note: fetchUrl already contains query params
+    const url = `${fetchUrl}&si=${sign}&bt=${bannerType || ""}&as=${adSize || ""}&pid=${positionId || ""}`;
     let attempt = 0;
     
     const doFetch = async () => {
@@ -182,7 +186,7 @@ export default class AdSDK {
         
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
-        // if startToken changed meanwhile, ignore the fetched result
+        
         if (token !== this._startTokens[domId]) {
           log(debug, `Fetch result ignored for #${domId} (stale token)`, 'warn');
           throw new Error('stale_fetch');
@@ -191,13 +195,13 @@ export default class AdSDK {
         if (bannerType === "OVERLAY" && json?.delayOffSet !== undefined) {
           this._overlayDelayInfo[domId] = {
             lastRequestTime: now(),
-            delayOffSet: json.delayOffSet * 1000 // convert to milliseconds
+            delayOffSet: json.delayOffSet * 1000
           };
           log(debug, `OVERLAY delay tracked for #${domId}: ${json.delayOffSet}s`);
         }
         return json;
       } catch (err) {
-        if (err.message === 'stale_fetch') throw err; // bubble up so start() knows not to show error
+        if (err.message === 'stale_fetch') throw err;
         if (attempt <= fetchRetries) {
           log(debug, `Retrying fetch (${attempt}) after ${fetchBackoff}ms due to ${err.message}`);
           await new Promise((r) => setTimeout(r, fetchBackoff));
@@ -212,10 +216,10 @@ export default class AdSDK {
   }
   
   _checkOverlayDelay(domId, bannerType) {
-    if (bannerType !== "OVERLAY") return true; // No delay check for non-OVERLAY
+    if (bannerType !== "OVERLAY") return true;
     
     const delayInfo = this._overlayDelayInfo[domId];
-    if (!delayInfo) return true; // First request, no delay
+    if (!delayInfo) return true;
     
     const timeSinceLastRequest = now() - delayInfo.lastRequestTime;
     const remainingDelay = delayInfo.delayOffSet - timeSinceLastRequest;
@@ -228,8 +232,47 @@ export default class AdSDK {
     return true;
   }
   
-  // Start — idempotent per domId: duplicate calls ignored but will force re-render
-  async start(domId, bannerType, adSize, positionId) {
+  // NEW: Execute callback with result
+  _executeCallback(domId, status, data = null, error = null) {
+    const callback = this._callbacks[domId];
+    if (callback && typeof callback === 'function') {
+      try {
+        callback({
+          status,
+          domId,
+          data,
+          error,
+          timestamp: now()
+        });
+      } catch (err) {
+        log(this.cfg.debug, `Callback error for #${domId}: ${err.message}`, 'error');
+      }
+      // Clear callback after execution
+      delete this._callbacks[domId];
+    }
+  }
+  
+  // UPDATED: start() now accepts callback as last parameter
+  async start(domId, bannerType, adSize, positionIdOrCallback, callback) {
+    // Handle parameter overloading
+    let positionId;
+    let cb;
+    
+    if (typeof positionIdOrCallback === 'function') {
+      // start(domId, bannerType, adSize, callback)
+      cb = positionIdOrCallback;
+      positionId = undefined;
+    } else {
+      // start(domId, bannerType, adSize, positionId, callback)
+      positionId = positionIdOrCallback;
+      cb = callback;
+    }
+    
+    // Store callback for this domId
+    if (cb) {
+      this._callbacks[domId] = cb;
+    }
+    
     if (!this._checkOverlayDelay(domId, bannerType)) {
       const delayInfo = this._overlayDelayInfo[domId];
       const remainingDelay = Math.ceil((delayInfo.delayOffSet - (now() - delayInfo.lastRequestTime)) / 1000);
@@ -240,28 +283,45 @@ export default class AdSDK {
         delayOffSet: delayInfo.delayOffSet / 1000
       });
       
+      // Execute callback with delay status
+      this._executeCallback(domId, 'delay', {
+        remainingSeconds: remainingDelay,
+        delayOffSet: delayInfo.delayOffSet / 1000,
+        message: 'Ad is in delay period'
+      });
+      
       log(this.cfg.debug, `Start blocked for #${domId}: in delay period (${remainingDelay}s remaining)`);
       return;
     }
-    // Always allow start: re-render fresh view
-    if (!domId && this.cfg.type !== AdSDK.TYPE.WELCOME) throw new Error("AdSDK.start(domId) requires a DOM ID");
     
-    // Prepare DOM (reuse domEl if exists)
+    if (!domId && this.cfg.type !== AdSDK.TYPE.WELCOME) {
+      const error = new Error("AdSDK.start(domId) requires a DOM ID");
+      this._executeCallback(domId, 'error', null, error);
+      throw error;
+    }
+    
+    // Prepare DOM
     if (this.cfg.type === AdSDK.TYPE.WELCOME) {
       if (!this._welcomeDom) {
         this._welcomeDom = this._createWelcomeDom();
-        
         domId = this._welcomeSlotId;
         
         if (!domId) {
-          console.error("Welcome slot was not initialized correctly");
+          const error = new Error("Welcome slot was not initialized correctly");
+          this._executeCallback(domId, 'error', null, error);
+          console.error(error.message);
           return;
         }
       }
     }
     
     const wrapper = (typeof domId === "string") ? document.getElementById(domId) : domId;
-    if (!wrapper) throw new Error(`AdSDK: element #${domId} not found`);
+    if (!wrapper) {
+      const error = new Error(`AdSDK: element #${domId} not found`);
+      this._executeCallback(domId, 'error', null, error);
+      throw error;
+    }
+    
     this._domEls[domId] = wrapper;
     if (bannerType === "DISPLAY") {
       this._domEls[domId].innerHTML = "";
@@ -281,10 +341,8 @@ export default class AdSDK {
     this._containers[domId] = container;
     this._domEls[domId].appendChild(container);
     
-    // Mark SDK as initialized only once
     this._started = true;
     
-    // New token for each start (replace old pending async work) — per slot
     const token = (this._startTokens[domId] || 0) + 1;
     this._startTokens[domId] = token;
     
@@ -294,29 +352,33 @@ export default class AdSDK {
     try {
       this.emit("request", {domId});
       const data = await this._fetchAd(domId, token, bannerType, adSize, positionId);
-      // If token changed, fetched result was ignored by _fetchAd when stale and an error thrown
+      
       this._adData[domId] = data;
       this._renderAd(data, token, domId, bannerType);
       this.emit("loaded", {domId, data});
+      
+      // Callback will be executed when ad is rendered (in _renderImageAd or _renderIframeAd)
+      
     } catch (err) {
       if (err.message === 'stale_fetch') {
-        // expected when a newer start/refresh happened — do nothing
         log(this.cfg.debug, `Stale fetch ignored for #${domId}.`);
         return;
       }
+      
       log(this.cfg.debug, `Ad fetch error for #${domId}: ${err.message}`);
       this._renderFallback(domId);
       this.emit("error", {domId, err});
+      
+      // Execute callback with error
+      this._executeCallback(domId, 'error', null, err);
     }
   }
   
-  // Destroy — view-only: do NOT reset SDK internals like other slots
   dismiss(domId) {
     const wrapper = document.getElementById(domId);
-    const layer = wrapper.querySelector(".ad-click-layer-" + domId);
+    const layer = wrapper?.querySelector(".ad-click-layer-" + domId);
     if (layer) layer.remove();
     
-    // if domId provided, only remove that slot
     if (domId) {
       if (domId === this._welcomeSlotId) {
         if (this._welcomeDom) {
@@ -330,12 +392,12 @@ export default class AdSDK {
         clearTimeout(this._renderTimeouts[domId]);
         delete this._renderTimeouts[domId];
       }
-      // cleanup iframe listener for that slot
+      
       if (this._iframeListeners?.[domId]) {
         window.removeEventListener("message", this._iframeListeners[domId]);
         delete this._iframeListeners[domId];
       }
-      // cleanup fit/resize handlers
+      
       if (this._iframeCleanups?.[domId]) {
         try {
           this._iframeCleanups[domId]();
@@ -343,6 +405,7 @@ export default class AdSDK {
         }
         delete this._iframeCleanups[domId];
       }
+      
       if (this._imgCleanups?.[domId]) {
         try {
           this._imgCleanups[domId]();
@@ -350,35 +413,34 @@ export default class AdSDK {
         }
         delete this._imgCleanups[domId];
       }
-      // clear skip timer
+      
       if (this._skipTimers?.[domId]) {
         clearTimeout(this._skipTimers[domId]);
         delete this._skipTimers[domId];
       }
+      
+      // Clear callback
+      delete this._callbacks[domId];
       
       const el = this._domEls[domId] || document.getElementById(domId);
       if (el) {
         const container = el.querySelector('.ad-sdk-wrapper');
         if (container) el.removeChild(container);
       }
-      // remove internal refs
+      
       delete this._containers[domId];
       delete this._domEls[domId];
       delete this._adData[domId];
       delete this._startTokens[domId];
-      // NEW: Don't delete delay info on destroy to preserve delay tracking
-      // delete this._overlayDelayInfo[domId];
       
       this.emit("dismiss", {domId});
       log(this.cfg.debug, `SDK destroyed view for #${domId} - cleaned up listeners & timers.`);
       return;
     }
     
-    // no domId -> remove all view slots
     Object.keys(this._containers).forEach((id) => this.dismiss(id));
   }
   
-  // Hard destroy: full reset (for debugging or full teardown)
   destroy() {
     Object.keys(this._containers).forEach((domId) => {
       try {
@@ -422,7 +484,8 @@ export default class AdSDK {
     this._imgCleanups = {};
     this._skipTimers = {};
     this._startTokens = {};
-    this._overlayDelayInfo = {}; // NEW: Clear delay tracking
+    this._overlayDelayInfo = {};
+    this._callbacks = {}; // Clear all callbacks
     
     if (this._messageListener) {
       window.removeEventListener('message', this._messageListener);
@@ -465,20 +528,17 @@ export default class AdSDK {
       wrapper.style.overflow = "visible";
     };
     
-    // initial
     applyScale();
     
     const resizeHandler = () => applyScale();
     window.addEventListener("resize", resizeHandler);
     
-    // return cleanup
     return () => {
       window.removeEventListener("resize", resizeHandler);
     };
   }
   
   _startSkipCountdown(token, domId, ad, isWelcome) {
-    // clear old
     if (this._skipTimers?.[domId]) {
       clearTimeout(this._skipTimers[domId]);
       this._skipTimers[domId] = null;
@@ -486,10 +546,8 @@ export default class AdSDK {
     
     const skipTime = (isWelcome ? ad.skipOffset : ad.skipOffSet) || 0
     
-    // Không có skipOffset => không làm gì
     if (!skipTime) return;
     
-    // Chỉ thêm countdown text cho welcome ads
     let countdownText = null;
     if (isWelcome) {
       const container = this._containers[domId];
@@ -513,7 +571,6 @@ export default class AdSDK {
         });
         container.appendChild(countdownText);
         
-        // Countdown interval
         let remainingTime = skipTime;
         const countdownInterval = setInterval(() => {
           if (token !== this._startTokens[domId]) {
@@ -529,7 +586,6 @@ export default class AdSDK {
             countdownText.textContent = `Bỏ qua sau ${remainingTime} giây`;
           } else {
             clearInterval(countdownInterval);
-            // Ẩn text khi countdown về 0
             if (countdownText) {
               countdownText.style.opacity = "0";
               setTimeout(() => {
@@ -543,17 +599,14 @@ export default class AdSDK {
       }
     }
     
-    // Setup timer new
     this._skipTimers[domId] = setTimeout(() => {
       if (token !== this._startTokens[domId]) return;
       
-      // Hiện nút close
-      if (document.getElementById(domId).querySelector('.banner-close-btn')) {
+      if (document.getElementById(domId)?.querySelector('.banner-close-btn')) {
         document.getElementById(domId).querySelector('.banner-close-btn').style.opacity = "1";
         document.getElementById(domId).querySelector('.banner-close-btn').style.pointerEvents = "auto";
       }
       
-      // Đảm bảo text đã bị xóa
       if (countdownText && countdownText.parentNode) {
         countdownText.style.opacity = "0";
         setTimeout(() => {
@@ -565,33 +618,26 @@ export default class AdSDK {
     }, skipTime * 1000);
   }
   
-  // Refactored _renderAd method
   _renderAd(ad, token, domId, bannerType) {
     if (!ad) return this._renderFallback(domId);
     
-    // If token outdated, skip render
     if (token !== this._startTokens[domId]) {
       log(this.cfg.debug, `Render ignored for #${domId} (stale token:${token})`, 'warn');
       return;
     }
     
-    // Ensure container still exists
     const container = this._containers[domId];
     if (!container) {
       log(this.cfg.debug, `Render aborted: container missing for #${domId}`, 'warn');
       return this._renderFallback(domId);
     }
     
-    // Clear container content
     container.innerHTML = "";
     
-    // Initialize _renderTimeouts if not exists
     if (!this._renderTimeouts) this._renderTimeouts = {};
     
-    // Determine if this is a Welcome ad
     const isWelcome = this.cfg.type === AdSDK.TYPE.WELCOME;
     
-    // Create close button for overlay banner type or welcome ads
     if (bannerType === "OVERLAY" || isWelcome) {
       const buttonSkip = document.createElement("button");
       buttonSkip.className = "banner-close-btn";
@@ -619,7 +665,6 @@ export default class AdSDK {
       });
       container.appendChild(buttonSkip);
       
-      // Store reference for welcome close button
       if (isWelcome) {
         this._welcomeCloseBtn = buttonSkip;
       }
@@ -630,7 +675,6 @@ export default class AdSDK {
         buttonSkip.style.opacity = "0";
         buttonSkip.style.pointerEvents = "none";
         
-        // For welcome ads, fade out and destroy the entire overlay
         if (isWelcome && this._welcomeDom) {
           this._welcomeDom.style.opacity = "0";
           setTimeout(() => {
@@ -640,7 +684,6 @@ export default class AdSDK {
       });
     }
     
-    // Handle different banner sources
     switch (ad.bannerSource) {
       case "IMG": {
         this._renderImageAd(ad, token, domId, container, isWelcome);
@@ -655,17 +698,20 @@ export default class AdSDK {
       }
       
       case "VAST": {
-        // VAST rendering is async
         this._renderVast(ad.url, token, domId)
           .then(() => {
             if (token !== this._startTokens[domId]) return;
             this.emit("rendered", {domId, ad});
+            // Execute callback for VAST success
+            this._executeCallback(domId, 'success', ad);
           })
           .catch((err) => {
             console.error("[AdSDK] VAST render error:", err);
             if (token !== this._startTokens[domId]) return;
             this.emit("error", {domId, err});
             this._handleRenderError(domId, isWelcome);
+            // Execute callback for VAST error
+            this._executeCallback(domId, 'error', null, err);
           });
         break;
       }
@@ -674,8 +720,7 @@ export default class AdSDK {
         this._renderFallback(domId);
     }
   }
-
-// Extract image rendering logic
+  
   _renderImageAd(ad, token, domId, container, isWelcome) {
     const img = new Image();
     img.src = isWelcome ? ad.url : ad.content;
@@ -685,7 +730,6 @@ export default class AdSDK {
     img.style.transformOrigin = "top left";
     img.style.cursor = ad.clickThrough ? "pointer" : "default";
     
-    // Scale + center image in container
     const applyScale = () => {
       if (!this._containers[domId]) return;
       const wrapW = container.clientWidth;
@@ -704,15 +748,12 @@ export default class AdSDK {
       container.style.overflow = "visible";
     };
     
-    // Append before applying scale so onload triggers
     container.appendChild(img);
     applyScale();
     
-    // Auto update on resize
     const resizeHandler = () => applyScale();
     window.addEventListener("resize", resizeHandler);
     
-    // Store cleanup
     this._imgCleanups[domId] = () => {
       window.removeEventListener("resize", resizeHandler);
     };
@@ -721,7 +762,6 @@ export default class AdSDK {
       if (token !== this._startTokens[domId]) return;
       if (!this._containers[domId]) return;
       
-      // For welcome ads, show the overlay after image loads
       if (isWelcome && this._welcomeDom) {
         requestAnimationFrame(() => {
           this._welcomeDom.style.opacity = "1";
@@ -731,17 +771,23 @@ export default class AdSDK {
       this.emit("rendered", {domId, ad});
       this._startSkipCountdown(token, domId, ad, isWelcome);
       this._track("impression", ad.trackingEvents?.impression);
+      
+      // NEW: Execute callback on successful render
+      this._executeCallback(domId, 'success', ad);
     };
     
     img.onerror = () => {
       console.error("[AdSDK] Image load error:", img.src);
       if (token !== this._startTokens[domId]) return;
       this._track("error", ad.trackingEvents?.error);
-      this.emit("error", {domId, err: new Error(`Image load error: ${img.src}`)});
+      const error = new Error(`Image load error: ${img.src}`);
+      this.emit("error", {domId, err: error});
       this._handleRenderError(domId, isWelcome);
+      
+      // NEW: Execute callback on image load error
+      this._executeCallback(domId, 'error', null, error);
     };
     
-    // Click tracking
     if (ad.clickThrough) {
       img.addEventListener("click", () => {
         if (token !== this._startTokens[domId]) return;
@@ -751,8 +797,7 @@ export default class AdSDK {
       });
     }
   }
-
-// Extract iframe rendering logic
+  
   _renderIframeAd(ad, token, domId, container, isWelcome) {
     if (token !== this._startTokens[domId]) return;
     
@@ -762,36 +807,32 @@ export default class AdSDK {
     iframe.style.border = "none";
     iframe.sandbox = "allow-scripts allow-same-origin allow-popups allow-top-navigation-by-user-activation";
     
-    // Add unique data attribute to identify this iframe
     const iframeId = `iframe-${domId}-${token}`;
     iframe.setAttribute('data-ad-iframe-id', iframeId);
     
-    // For Welcome ads, content is in ad.url, for others in ad.content
     const contentSource = isWelcome ? ad.url : ad.content;
     
     if (!contentSource) {
       console.error('[AdSDK] No content source for iframe ad');
-      this.emit("error", {domId, err: new Error('No content source')});
+      const error = new Error('No content source');
+      this.emit("error", {domId, err: error});
       this._handleRenderError(domId, isWelcome);
+      this._executeCallback(domId, 'error', null, error);
       return;
     }
     
-    // Safe set src/srcdoc only once
     try {
       const url = new URL(contentSource);
       iframe.src = url.href;
     } catch (err) {
-      // treat as html => use srcdoc
       iframe.srcdoc = contentSource;
     }
     
-    // Optional width/height attrs (numbers or empty)
     if (ad.ratioWidth) iframe.width = ad.ratioWidth;
     if (ad.ratioHeight) iframe.height = ad.ratioHeight;
     
     container.appendChild(iframe);
     
-    // Fit banner into slot and store cleanup
     const cleanupFit = this.fitBannerIframe(
       container,
       iframe,
@@ -806,10 +847,8 @@ export default class AdSDK {
     }
     this._iframeCleanups[domId] = cleanupFit;
     
-    // Track if this slot has already rendered to prevent duplicate impressions
     let hasRendered = false;
     
-    // Ensure only one message listener per domId
     if (this._iframeListeners[domId]) {
       try {
         window.removeEventListener("message", this._iframeListeners[domId]);
@@ -818,73 +857,26 @@ export default class AdSDK {
       delete this._iframeListeners[domId];
     }
     
-    // Listener for iframe messages
     this._iframeListeners[domId] = (e) => {
       const d = e.data;
       
-      console.log('[AdSDK Debug] Message received:', {
-        origin: e.origin,
-        data: d,
-        expectedDomId: domId,
-        expectedChannel: this.cfg.postMessageChannel,
-        hasRendered: hasRendered,
-        isWelcome: isWelcome,
-        iframeContentWindow: iframe.contentWindow,
-        messageSource: e.source,
-        sourceMatches: e.source === iframe.contentWindow
-      });
+      if (!d) return;
+      if (d.channel && d.channel !== this.cfg.postMessageChannel) return;
+      if (d.domId && d.domId !== domId) return;
+      if (e.source && iframe.contentWindow && e.source !== iframe.contentWindow) return;
+      if (hasRendered) return;
       
-      if (!d) {
-        console.log('[AdSDK Debug] No data in message');
-        return;
-      }
-      
-      if (d.channel && d.channel !== this.cfg.postMessageChannel) {
-        console.log('[AdSDK Debug] Wrong channel:', d.channel, 'expected:', this.cfg.postMessageChannel);
-        return;
-      }
-      
-      // IMPORTANT: Check if message is from THIS specific iframe
-      // Method 1: Check if domId matches (if provided in message)
-      if (d.domId && d.domId !== domId) {
-        console.log('[AdSDK Debug] Wrong domId:', d.domId, 'expected:', domId);
-        return;
-      }
-      
-      // Method 2: Check if iframe source matches message source
-      // Note: For welcome ads, iframe might not be fully loaded yet when message arrives
-      if (e.source && iframe.contentWindow && e.source !== iframe.contentWindow) {
-        console.log('[AdSDK Debug] Message not from this iframe, source mismatch');
-        return;
-      }
-      
-      // Prevent duplicate impressions
-      if (hasRendered) {
-        console.log('[AdSDK Debug] Already rendered, ignoring duplicate message');
-        return;
-      }
-      
-      // Handle render-ready signals from iframe
       if (d.imageLoaded || d.type === "RENDERED" || d.event === "rendered" || d.action === "ADS_LOADED") {
-        console.log('[AdSDK Debug] ✅ RENDERED signal detected for domId:', domId, 'isWelcome:', isWelcome);
-        if (token !== this._startTokens[domId]) {
-          console.log('[AdSDK Debug] Token mismatch, ignoring');
-          return;
-        }
+        if (token !== this._startTokens[domId]) return;
         
-        // Mark as rendered
         hasRendered = true;
         
-        // Clear render timeout since we got the message
         if (this._renderTimeouts && this._renderTimeouts[domId]) {
-          console.log('[AdSDK Debug] Clearing timeout for domId:', domId);
           clearTimeout(this._renderTimeouts[domId]);
           delete this._renderTimeouts[domId];
         }
         
-        // For welcome ads, show the overlay after iframe renders
         if (isWelcome && this._welcomeDom) {
-          console.log('[AdSDK Debug] Fading in welcome overlay');
           requestAnimationFrame(() => {
             this._welcomeDom.style.opacity = "1";
           });
@@ -893,53 +885,37 @@ export default class AdSDK {
         this.emit("rendered", {domId, ad});
         this._startSkipCountdown(token, domId, ad, isWelcome);
         this._track("impression", ad.trackingEvents?.impression);
-      } else {
-        console.log('[AdSDK Debug] ⚠️ Message not recognized as RENDERED signal, data:', d);
+        
+        // NEW: Execute callback on successful render
+        this._executeCallback(domId, 'success', ad);
       }
     };
     
-    // Register listener
     window.addEventListener("message", this._iframeListeners[domId]);
-    console.log('[AdSDK Debug] Listener registered for domId:', domId);
     
-    // Timeout: if no message received within timeout, treat as error
     const renderTimeout = setTimeout(() => {
-      console.log('[AdSDK Debug] Timeout fired for domId:', domId, {
-        token: token,
-        currentToken: this._startTokens[domId],
-        hasRendered: hasRendered,
-        isWelcome: isWelcome,
-        welcomeDomExists: !!this._welcomeDom,
-        welcomeDomOpacity: this._welcomeDom?.style.opacity
-      });
-      
       if (token !== this._startTokens[domId]) return;
-      
-      // Check if already rendered
-      if (hasRendered) {
-        console.log('[AdSDK Debug] Timeout but already rendered, ignoring');
-        return;
-      }
+      if (hasRendered) return;
       
       const alreadyRendered = isWelcome
         ? (this._welcomeDom && this._welcomeDom.style.opacity === "1")
         : false;
       
       if (!alreadyRendered) {
-        console.error('[AdSDK] ❌ Iframe render timeout - no message received for domId:', domId, 'isWelcome:', isWelcome);
-        console.log('[AdSDK Debug] iframe.src:', iframe.src || 'N/A');
-        console.log('[AdSDK Debug] iframe.srcdoc:', iframe.srcdoc ? iframe.srcdoc.substring(0, 200) + '...' : 'N/A');
+        console.error('[AdSDK] Iframe render timeout for domId:', domId);
+        const error = new Error('Iframe render timeout');
         this._track("error", ad.trackingEvents?.error);
-        this.emit("error", {domId, err: new Error('Iframe render timeout')});
+        this.emit("error", {domId, err: error});
         this._handleRenderError(domId, isWelcome);
+        
+        // NEW: Execute callback on timeout error
+        this._executeCallback(domId, 'error', null, error);
       }
     }, 3000);
     
-    // Store timeout ID for cleanup
     if (!this._renderTimeouts) this._renderTimeouts = {};
     this._renderTimeouts[domId] = renderTimeout;
     
-    // Create overlay click layer ONLY for non-welcome ads
     if (ad.clickThrough) {
       const wrapper = document.getElementById(domId);
       wrapper.style.position = "absolute";
@@ -947,14 +923,13 @@ export default class AdSDK {
       const clickLayer = document.createElement("div");
       clickLayer.className = "ad-click-layer-" + domId;
       clickLayer.style.cssText = `
-      position:absolute;
-      inset:0;
-      z-index:9998;
-      cursor:pointer;
-      background:rgba(0,0,0,0);
-    `;
+        position:absolute;
+        inset:0;
+        z-index:9998;
+        cursor:pointer;
+        background:rgba(0,0,0,0);
+      `;
       
-      // CLICK HANDLER
       clickLayer.addEventListener("click", (e) => {
         e.stopPropagation();
         window.open(ad.clickThrough, "_blank");
@@ -965,11 +940,9 @@ export default class AdSDK {
       wrapper.appendChild(clickLayer);
     }
   }
-
-// Handle render errors (destroy for welcome, fallback for others)
+  
   _handleRenderError(domId, isWelcome) {
     if (isWelcome) {
-      // For welcome ads, destroy the entire overlay on error
       if (this._welcomeDom) {
         this._welcomeDom.style.opacity = "0";
         setTimeout(() => {
@@ -979,7 +952,6 @@ export default class AdSDK {
         this.dismiss(domId);
       }
     } else {
-      // For regular ads, show fallback
       this._renderFallback(domId);
     }
   }
@@ -989,7 +961,6 @@ export default class AdSDK {
     if (!response.ok) throw new Error(`VAST fetch error: ${response.status}`);
     const xmlText = await response.text();
     
-    // If token changed while fetching VAST, abort
     if (token !== this._startTokens[domId]) {
       log(this.cfg.debug, 'VAST fetch ignored (stale token)', 'warn');
       return;
@@ -1166,6 +1137,9 @@ export default class AdSDK {
         Ad unavailable
       </div>`;
     this.emit("rendered", {domId, type: "fallback"});
+    
+    // Execute callback for fallback
+    this._executeCallback(domId, 'fallback', null, new Error('Ad unavailable'));
   }
   
   _track(eventType, fetchUrl) {
@@ -1184,7 +1158,6 @@ export default class AdSDK {
   }
   
   _createWelcomeDom() {
-    // Generate overlay id
     const id = `ad-welcome-${Math.random().toString(36).slice(2, 7)}`;
     const el = document.createElement("div");
     Object.assign(el.style, {
@@ -1199,9 +1172,8 @@ export default class AdSDK {
       height: "100vh",
     });
     el.id = id;
-    el.style.opacity = "0";  // BẮT ĐẦU VỚI OPACITY = 0
+    el.style.opacity = "0";
     el.style.transition = "opacity 0.4s ease";
-    // XÓA requestAnimationFrame ở đây - sẽ fade in từ _renderAd
     
     document.body.appendChild(el);
     
@@ -1251,7 +1223,6 @@ export default class AdSDK {
     
     slot.appendChild(closeBtn);
     
-    // LƯU REFERENCE closeBtn để truy cập từ _renderAd
     this._welcomeCloseBtn = closeBtn;
     
     closeBtn.addEventListener("click", () => {
@@ -1275,10 +1246,9 @@ export default class AdSDK {
       
       switch (data.type) {
         case "start":
-          this.start(data.domId || this.cfg.domId, data.bannerType, data.adSize, data.positionId).then();
+          this.start(data.domId || this.cfg.domId, data.bannerType, data.adSize, data.positionId, data.callback).then();
           break;
         case "render":
-          // render a provided payload into a provided domId
           this._renderAd(data.payload, this._startTokens[data.domId] || 0, data.domId);
           break;
         case "dismiss":

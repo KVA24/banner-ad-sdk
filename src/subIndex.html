@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AdSDK với Callback Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 24px;
+    }
+    
+    .panel {
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .panel h3 {
+      margin-top: 0;
+      color: #555;
+      border-bottom: 2px solid #4CAF50;
+      padding-bottom: 8px;
+    }
+    
+    #ad-slot {
+      width: 100%;
+      height: 250px;
+      border: 2px dashed #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fafafa;
+      color: #999;
+      font-size: 14px;
+    }
+    
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    
+    button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.3s;
+    }
+    
+    button:hover {
+      background: #45a049;
+    }
+    
+    button:active {
+      transform: scale(0.98);
+    }
+    
+    button.secondary {
+      background: #2196F3;
+    }
+    
+    button.secondary:hover {
+      background: #0b7dda;
+    }
+    
+    button.danger {
+      background: #f44336;
+    }
+    
+    button.danger:hover {
+      background: #da190b;
+    }
+    
+    .log-panel {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 16px;
+      border-radius: 4px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    
+    .log-entry {
+      margin-bottom: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid #333;
+    }
+    
+    .log-time {
+      color: #858585;
+      margin-right: 8px;
+    }
+    
+    .log-success {
+      color: #4EC9B0;
+    }
+    
+    .log-error {
+      color: #f48771;
+    }
+    
+    .log-delay {
+      color: #DCDCAA;
+    }
+    
+    .log-fallback {
+      color: #CE9178;
+    }
+    
+    .status-box {
+      padding: 12px;
+      border-radius: 4px;
+      margin-top: 12px;
+      display: none;
+    }
+    
+    .status-box.show {
+      display: block;
+    }
+    
+    .status-box.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .status-box.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .status-box.delay {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
+    }
+    
+    .video-container {
+      position: relative;
+      width: 100%;
+      height: 450px;
+      background: #000;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    #video-demo {
+      width: 100%;
+      height: 100%;
+    }
+    
+    #video-ad-slot {
+      position: absolute;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 640px;
+      height: 90px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🎯 AdSDK với Callback Pattern Demo</h1>
+  
+  <!-- Panel 1: Banner Tĩnh -->
+  <div class="panel">
+    <h3>1️⃣ Banner Tĩnh (Display Banner)</h3>
+    <div id="ad-slot">Chờ hiển thị quảng cáo...</div>
+    
+    <div class="controls">
+      <button id="btn-load-ad">Tải Quảng Cáo</button>
+      <button id="btn-dismiss" class="danger">Dismiss</button>
+    </div>
+    
+    <div id="status-static" class="status-box"></div>
+  </div>
+  
+  <!-- Panel 2: Video với Overlay -->
+  <div class="panel">
+    <h3>2️⃣ Video với Overlay Banner (Pause để hiện)</h3>
+    <div class="video-container">
+      <video id="video-demo" controls>
+        <source src="http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
+      </video>
+      <div id="video-ad-slot">Video Ad Slot</div>
+    </div>
+    
+    <div id="status-video" class="status-box"></div>
+  </div>
+  
+  <!-- Panel 3: Event Log -->
+  <div class="panel">
+    <h3>3️⃣ Event Log & Callback Results</h3>
+    <div class="log-panel" id="log"></div>
+  </div>
+</div>
+
+<!-- Load SDK -->
+<script src="/dist/ad-sdk.min.js"></script>
+
+<script>
+  // Logging utility
+  const logEl = document.getElementById('log');
+  
+  function addLog(message, type = 'info') {
+    const time = new Date().toLocaleTimeString();
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    
+    let className = '';
+    if (type === 'success') className = 'log-success';
+    else if (type === 'error') className = 'log-error';
+    else if (type === 'delay') className = 'log-delay';
+    else if (type === 'fallback') className = 'log-fallback';
+    
+    entry.innerHTML = `<span class="log-time">[${time}]</span><span class="${className}">${message}</span>`;
+    logEl.insertBefore(entry, logEl.firstChild);
+    
+    console.log(`[${time}]`, message);
+  }
+  
+  // Show status box
+  function showStatus(elementId, status, message) {
+    const box = document.getElementById(elementId);
+    box.className = `status-box show ${status}`;
+    box.textContent = message;
+    
+    setTimeout(() => {
+      box.classList.remove('show');
+    }, 5000);
+  }
+  
+  // Initialize SDK
+  window.sdk = new AdSDK({
+    env: AdSDK.ENV.SANDBOX,
+    type: AdSDK.TYPE.DISPLAY,
+    debug: true,
+    tenantId: 14,
+    streamId: "123456",
+    channelId: "654321",
+    title: "Demo Video",
+    transId: "demo_001",
+    category: "entertainment",
+    keyword: "test, demo",
+    age: "25",
+    gender: AdSDK.GENDER.MALE,
+  });
+  
+  addLog('✅ SDK initialized successfully', 'success');
+  
+  // Button: Load Ad
+  document.getElementById('btn-load-ad').addEventListener('click', () => {
+    addLog('🔄 Đang tải quảng cáo...');
+    
+    window.sdk.start("ad-slot", "DISPLAY", "LARGE_BANNER", "homepage1", (result) => {
+      console.log('📦 Callback received:', result);
+      
+      if (result.status === 'success') {
+        addLog(`✅ Quảng cáo hiển thị thành công! (domId: ${result.domId})`, 'success');
+        showStatus('status-static', 'success', '✅ Quảng cáo đã được tải và hiển thị thành công!');
+        
+        // Log thông tin chi tiết
+        if (result.data) {
+          addLog(`📊 Banner Source: ${result.data.bannerSource}`);
+          addLog(`📐 Size: ${result.data.ratioWidth}x${result.data.ratioHeight}`);
+        }
+        
+      } else if (result.status === 'error') {
+        addLog(`❌ Lỗi khi tải quảng cáo: ${result.error.message}`, 'error');
+        showStatus('status-static', 'error', `❌ Lỗi: ${result.error.message}`);
+        
+      } else if (result.status === 'delay') {
+        addLog(`⏳ Quảng cáo trong thời gian delay: ${result.data.remainingSeconds}s`, 'delay');
+        showStatus('status-static', 'delay', `⏳ Vui lòng đợi ${result.data.remainingSeconds} giây`);
+        
+      } else if (result.status === 'fallback') {
+        addLog(`⚠️ Hiển thị fallback: Không có quảng cáo khả dụng`, 'fallback');
+        showStatus('status-static', 'error', '⚠️ Không có quảng cáo khả dụng');
+      }
+    });
+  });
+  
+  // Button: Dismiss
+  document.getElementById('btn-dismiss').addEventListener('click', () => {
+    window.sdk.dismiss("ad-slot");
+    addLog('🗑️ Đã dismiss quảng cáo');
+    showStatus('status-static', 'success', 'Đã xóa quảng cáo');
+  });
+  
+  // Video pause/play handling
+  const video = document.getElementById('video-demo');
+  const videoAdSlot = document.getElementById('video-ad-slot');
+  let isSeeking = false;
+  let pauseTimeout = null;
+  
+  video.addEventListener('seeking', () => {
+    isSeeking = true;
+  });
+  
+  video.addEventListener('seeked', () => {
+    setTimeout(() => {
+      isSeeking = false;
+    }, 100);
+  });
+  
+  video.addEventListener('pause', () => {
+    if (isSeeking) return;
+    
+    clearTimeout(pauseTimeout);
+    pauseTimeout = setTimeout(() => {
+      if (!video.paused || isSeeking) return;
+      
+      addLog('⏸️ Video paused - Đang tải overlay banner...');
+      
+      // Show overlay ad with callback
+      window.sdk.start("video-ad-slot", "OVERLAY", "PAUSE_BANNER", (result) => {
+        console.log('📦 Video Ad Callback:', result);
+        
+        if (result.status === 'success') {
+          addLog(`✅ Overlay banner hiển thị! (domId: ${result.domId})`, 'success');
+          showStatus('status-video', 'success', '✅ Overlay banner đã được tải');
+          
+          // Show the ad slot
+          videoAdSlot.style.opacity = '1';
+          videoAdSlot.style.pointerEvents = 'auto';
+          
+        } else if (result.status === 'error') {
+          addLog(`❌ Lỗi overlay: ${result.error.message}`, 'error');
+          showStatus('status-video', 'error', `❌ ${result.error.message}`);
+          
+        } else if (result.status === 'delay') {
+          addLog(`⏳ Overlay trong delay: ${result.data.remainingSeconds}s`, 'delay');
+          showStatus('status-video', 'delay', `⏳ Đợi ${result.data.remainingSeconds}s`);
+        }
+      });
+    }, 150);
+  });
+  
+  video.addEventListener('play', () => {
+    addLog('▶️ Video playing - Ẩn overlay');
+    videoAdSlot.style.opacity = '0';
+    videoAdSlot.style.pointerEvents = 'none';
+    window.sdk.dismiss("video-ad-slot");
+  });
+  
+  // Listen to SDK events
+  window.sdk.on('rendered', (data) => {
+    addLog(`🎨 Event: Ad rendered (domId: ${data.domId})`);
+  });
+  
+  window.sdk.on('click', (data) => {
+    addLog(`👆 Event: Ad clicked (domId: ${data.domId})`);
+  });
+  
+  window.sdk.on('skip', (data) => {
+    addLog(`⏭️ Event: Ad skipped (domId: ${data.domId})`);
+  });
+  
+  window.sdk.on('error', (data) => {
+    addLog(`🚨 Event: Error occurred (domId: ${data.domId})`, 'error');
+  });
+  
+  // Initial log
+  addLog('🚀 Demo ready! Click "Tải Quảng Cáo" để bắt đầu');
+</script>
+</body>
+</html>

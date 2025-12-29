@@ -85,7 +85,7 @@
 
 <div class="panel">
   <h3>1) Khung quảng cáo</h3>
-  <div class="ad-controls" style="position:relative;width:100%;height:245px">
+  <div id="ad-controls" style="position:relative;width:100%;height:245px;display: block; opacity: 0">
     <div id="ad-slot" style="
     width:100%;height:245px;border:1px dashed #aaa;
     display:flex;align-items:center;justify-content:center;
@@ -279,11 +279,23 @@
         el.style.opacity = '0';
       }
       
+      const streamId = document.getElementById('input-stream').value.trim();
+      const channelId = document.getElementById('input-channel').value.trim();
       const positionId = document.getElementById('input-position').value.trim();
       const bannerType = document.getElementById('select-banner').value;
       
       if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.sdk.start("ad-slot", "DISPLAY", bannerType, positionId);
+      window.sdk.start("ad-slot", "DISPLAY", bannerType, positionId, (data) => {
+        if (data && data.status === 'success') {
+          console.log("Ad successfully");
+          const elControl = document.getElementById("ad-controls");
+          if (elControl) {
+            elControl.style.opacity = '1';
+          }
+        } else {
+          console.log("Ad failure");
+        }
+      });
       document.getElementById('slot-info').textContent =
         `Stream ID: ${streamId || "null"}, Channel ID: ${channelId || "null"}, Position ID: ${positionId}, Banner: ${bannerType}`;
       
