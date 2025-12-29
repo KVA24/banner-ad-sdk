@@ -268,11 +268,6 @@ export default class AdSDK {
       cb = callback;
     }
     
-    // Store callback for this domId
-    if (cb) {
-      this._callbacks[domId] = cb;
-    }
-    
     if (!this._checkOverlayDelay(domId, bannerType)) {
       const delayInfo = this._overlayDelayInfo[domId];
       const remainingDelay = Math.ceil((delayInfo.delayOffSet - (now() - delayInfo.lastRequestTime)) / 1000);
@@ -313,6 +308,11 @@ export default class AdSDK {
           return;
         }
       }
+    }
+    
+    // Store callback for this domId
+    if (cb) {
+      this._callbacks[domId] = cb;
     }
     
     const wrapper = (typeof domId === "string") ? document.getElementById(domId) : domId;

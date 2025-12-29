@@ -310,7 +310,13 @@
     
     document.getElementById('btn-welcome').addEventListener('click', () => {
       if (!window.sdk) return log('SDK not ready. Call init first.');
-      window.welcomeSdk.start()
+      window.welcomeSdk.start(null, null, null, (data) => {
+        if (data && data.status === 'success') {
+          console.log("Ad successfully");
+        } else {
+          console.log("Ad failure");
+        }
+      })
       log('welcomeSdk.start() called');
     })
   })();
