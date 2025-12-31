@@ -367,7 +367,7 @@ export default class AdSDK {
       }
       
       log(this.cfg.debug, `Ad fetch error for #${domId}: ${err.message}`);
-      this._renderFallback(domId);
+      this._renderFallback(domId, 1);
       this.emit("error", {domId, err});
       
       // Execute callback with error
@@ -620,7 +620,7 @@ export default class AdSDK {
   }
   
   _renderAd(ad, token, domId, bannerType) {
-    if (!ad) return this._renderFallback(domId);
+    if (!ad) return this._renderFallback(domId, 2);
     
     if (token !== this._startTokens[domId]) {
       log(this.cfg.debug, `Render ignored for #${domId} (stale token:${token})`, 'warn');
@@ -630,7 +630,7 @@ export default class AdSDK {
     const container = this._containers[domId];
     if (!container) {
       log(this.cfg.debug, `Render aborted: container missing for #${domId}`, 'warn');
-      return this._renderFallback(domId);
+      return this._renderFallback(domId, 3);
     }
     
     container.innerHTML = "";
@@ -718,7 +718,7 @@ export default class AdSDK {
       }
       
       default:
-        this._renderFallback(domId);
+        this._renderFallback(domId, 4);
     }
   }
   
@@ -862,9 +862,6 @@ export default class AdSDK {
       const d = e.data;
       
       if (!d) return;
-      if (d.channel && d.channel !== this.cfg.postMessageChannel) return;
-      if (d.domId && d.domId !== domId) return;
-      if (e.source && iframe.contentWindow && e.source !== iframe.contentWindow) return;
       if (hasRendered) return;
       
       if (d.imageLoaded || d.type === "RENDERED" || d.event === "rendered" || d.action === "ADS_LOADED") {
@@ -895,6 +892,15 @@ export default class AdSDK {
     window.addEventListener("message", this._iframeListeners[domId]);
     
     const renderTimeout = setTimeout(() => {
+      console.log('[AdSDK Debug] Timeout fired for domId:', domId, {
+        token: token,
+        currentToken: this._startTokens[domId],
+        hasRendered: hasRendered,
+        isWelcome: isWelcome,
+        welcomeDomExists: !!this._welcomeDom,
+        welcomeDomOpacity: this._welcomeDom?.style.opacity
+      });
+      
       if (token !== this._startTokens[domId]) return;
       if (hasRendered) return;
       
@@ -903,7 +909,7 @@ export default class AdSDK {
         : false;
       
       if (!alreadyRendered) {
-        console.error('[AdSDK] Iframe render timeout for domId:', domId);
+        console.error('[AdSDK] ❌ Iframe render timeout - no message received for domId:', domId, 'isWelcome:', isWelcome);
         const error = new Error('Iframe render timeout');
         this._track("error", ad.trackingEvents?.error);
         this.emit("error", {domId, err: error});
@@ -953,7 +959,7 @@ export default class AdSDK {
         this.dismiss(domId);
       }
     } else {
-      this._renderFallback(domId);
+      this._renderFallback(domId, 5);
     }
   }
   
@@ -1130,14 +1136,14 @@ export default class AdSDK {
     });
   }
   
-  _renderFallback(domId) {
+  _renderFallback(domId, index) {
     const container = this._containers[domId];
     if (!container) return;
     container.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;background:#eee;width:100%;height:100%;color:#999;">
         Ad unavailable
       </div>`;
-    this.emit("rendered", {domId, type: "fallback"});
+    this.emit("rendered", {domId, type: "fallback", index: index});
     
     // Execute callback for fallback
     this._executeCallback(domId, 'fallback', null, new Error('Ad unavailable'));
