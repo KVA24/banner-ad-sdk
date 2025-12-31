@@ -63,6 +63,7 @@ export default class AdSDK {
         postMessage: true,
         postMessageChannel: "ad-sdk",
         targetOrigin: "*",
+        isUsePartnerSkipButton: cfg.isUsePartnerSkipButton,
       },
       ENV[(cfg.env || "SANDBOX").toUpperCase()] || ENV.SANDBOX
     );
@@ -638,7 +639,7 @@ export default class AdSDK {
     
     const isWelcome = this.cfg.type === AdSDK.TYPE.WELCOME;
     
-    if (bannerType === "OVERLAY" || isWelcome) {
+    if (this.cfg.isUsePartnerSkipButton && (bannerType === "OVERLAY" || isWelcome)) {
       const buttonSkip = document.createElement("button");
       buttonSkip.className = "banner-close-btn";
       buttonSkip.innerHTML = "✕";
