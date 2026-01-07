@@ -149,15 +149,15 @@
       left:50%;
       transform:translateX(-50%);
       width:780px;
-      height:100px;
+      height:200px;
       pointer-events:none;
       z-index:10;
-      background:#fff;
-      border:1px solid #ccc;
+      background:transparent;
+      border:none;
       display:flex;
       align-items:center;
       justify-content:center;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      box-shadow: none;
       opacity:0;
       transition: opacity 0.3s;
     ">
@@ -250,7 +250,7 @@
         age: "20",
         gender: AdSDK.GENDER.MALE,
         uid20: "",
-        isUsePartnerSkipButton: false
+        isUsePartnerSkipButton: true
       });
       
       window.welcomeSdk = new AdSDK({
@@ -267,7 +267,7 @@
         age: "20",
         gender: AdSDK.GENDER.MALE,
         uid20: "",
-        isUsePartnerSkipButton: false
+        isUsePartnerSkipButton: true
       });
       
       attachSDKEvents(window.sdk);

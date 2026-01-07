@@ -253,6 +253,22 @@ export default class AdSDK {
     }
   }
   
+  _syncCloseButtonToImage(domId, img, scale, offset = 16) {
+    const container = this._containers[domId];
+    if (!container) return;
+    
+    const btn = container.querySelector('.banner-close-btn');
+    if (!btn) return;
+    
+    const imgLeft = parseFloat(img.style.left || 0);
+    const imgTop = parseFloat(img.style.top || 0);
+    
+    const scaledWidth = img.width * scale;
+    
+    btn.style.top = (imgTop - offset) + "px";
+    btn.style.left = (imgLeft + scaledWidth - btn.offsetWidth + offset) + "px";
+  }
+  
   // UPDATED: start() now accepts callback as last parameter
   async start(domId, bannerType, adSize, positionIdOrCallback, callback) {
     // Handle parameter overloading
@@ -733,6 +749,7 @@ export default class AdSDK {
     
     const applyScale = () => {
       if (!this._containers[domId]) return;
+      
       const wrapW = container.clientWidth;
       const wrapH = container.clientHeight;
       if (!wrapW || !wrapH) return;
@@ -742,11 +759,17 @@ export default class AdSDK {
       img.style.width = ad.ratioWidth + "px";
       img.style.height = ad.ratioHeight + "px";
       img.style.transform = `scale(${scale})`;
-      img.style.left = (wrapW - ad.ratioWidth * scale) / 2 + "px";
-      img.style.top = (wrapH - ad.ratioHeight * scale) / 2 + "px";
+      
+      const left = (wrapW - ad.ratioWidth * scale) / 2;
+      const top = (wrapH - ad.ratioHeight * scale) / 2;
+      
+      img.style.left = left + "px";
+      img.style.top = top + "px";
       
       container.style.position = "relative";
       container.style.overflow = "visible";
+      
+      this._syncCloseButtonToImage(domId, img, scale);
     };
     
     container.appendChild(img);
