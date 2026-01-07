@@ -288,7 +288,7 @@
   document.getElementById('btn-load-ad').addEventListener('click', () => {
     addLog('🔄 Đang tải quảng cáo...');
     
-    window.sdk.start("ad-slot", "DISPLAY", "LARGE_BANNER", "homepage1", (result) => {
+    window.sdk.start("ad-slot", "DISPLAY", "HOMEPAGE_LARGE_BANNER", "homepage1", (result) => {
       console.log('📦 Callback received:', result);
       
       if (result.status === 'success') {
@@ -349,7 +349,7 @@
       addLog('⏸️ Video paused - Đang tải overlay banner...');
       
       // Show overlay ad with callback
-      window.sdk.start("video-ad-slot", "OVERLAY", "PAUSE_BANNER", (result) => {
+      window.sdk.start("video-ad-slot", "OVERLAY", "PAUSE_LARGE_BANNER", (result) => {
         console.log('📦 Video Ad Callback:', result);
         
         if (result.status === 'success') {

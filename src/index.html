@@ -114,15 +114,15 @@
     
     <div class="input_each">
       <label>Position ID:</label><br/>
-      <input id="input-position" type="text" style="width:100%;margin-bottom:8px;" placeholder="VD: homepage1"
-             value="homepage1"/>
+      <input id="input-position" type="text" style="width:100%;margin-bottom:8px;" placeholder="VD: HOME_1"
+             value="HOME_1"/>
     </div>
     
     <div class="input_each">
       <label>Banner Type:</label><br/>
       <select id="select-banner" style="width:100%;margin-bottom:12px;">
-        <option value="LARGE_BANNER" selected>LARGE_BANNER</option>
-        <option value="MEDIUM_BANNER">MEDIUM_BANNER</option>
+        <option value="HOMEPAGE_LARGE_BANNER" selected>HOMEPAGE_LARGE_BANNER</option>
+        <option value="SUBPAGE_BANNER">SUBPAGE_BANNER</option>
       </select>
     </div>
   </div>
@@ -336,7 +336,7 @@
       if (!window.sdk) return;
       const el = document.getElementById(adSlotId);
       if (!el) return;
-      window.sdk.start(adSlotId, "OVERLAY", "PAUSE_BANNER");
+      window.sdk.start(adSlotId, "OVERLAY", "PAUSE_LARGE_BANNER");
       console.log('Banner shown (video paused)');
     };
     

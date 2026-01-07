@@ -82,17 +82,17 @@ sdk.start(domId, bannerType, adSize, positionId)
 |---------|------|----------|-------|
 | `domId` | String/Element | Có* | ID của element hoặc DOM element (*không bắt buộc với Welcome ads) |
 | `bannerType` | String | Có | Loại banner: `"DISPLAY"` hoặc `"OVERLAY"` |
-| `adSize` | String | Có | Kích thước: `"MINI_BANNER"`, `"MEDIUM_BANNER"`, `"LARGE_BANNER"`, `"PAUSE_BANNER"` |
+| `adSize` | String | Có | Kích thước: `"MINI_BANNER"`, `"SUBPAGE_BANNER"`, `"HOMEPAGE_LARGE_BANNER"`, `"PAUSE_LARGE_BANNER"` |
 | `positionId` | String | Có | ID vị trí quảng cáo |
 
 **Ví dụ:**
 
 ```javascript
 // Banner thông thường
-sdk.start("ad-slot", "DISPLAY", "LARGE_BANNER", "homepage1");
+sdk.start("ad-slot", "DISPLAY", "HOMEPAGE_LARGE_BANNER", "homepage1");
 
 // Overlay banner
-sdk.start("overlay-slot", "OVERLAY", "MEDIUM_BANNER", "video-overlay");
+sdk.start("overlay-slot", "OVERLAY", "SUBPAGE_BANNER", "video-overlay");
 
 // Welcome ads (không cần domId)
 welcomeSdk.start();
@@ -211,9 +211,9 @@ AdSDK.GENDER = {
 ```javascript
 AdSDK.AD_SIZE = {
   MINI_BANNER: "MINI_BANNER",
-  MEDIUM_BANNER: "MEDIUM_BANNER",
-  LARGE_BANNER: "LARGE_BANNER",
-  PAUSE_BANNER: "PAUSE_BANNER"
+  SUBPAGE_BANNER: "SUBPAGE_BANNER",
+  HOMEPAGE_LARGE_BANNER: "HOMEPAGE_LARGE_BANNER",
+  PAUSE_LARGE_BANNER: "PAUSE_LARGE_BANNER"
 }
 ```
 
@@ -251,7 +251,7 @@ sdk.on('error', (data) => {
 });
 
 // Hiển thị quảng cáo
-sdk.start("ad-container", "DISPLAY", "LARGE_BANNER", "homepage");
+sdk.start("ad-container", "DISPLAY", "HOMEPAGE_LARGE_BANNER", "homepage");
 </script>
 ```
 
@@ -266,7 +266,7 @@ const sdk = new AdSDK({
 });
 
 video.addEventListener('pause', () => {
-  sdk.start("video-overlay", "OVERLAY", "PAUSE_BANNER", "video-pause");
+  sdk.start("video-overlay", "OVERLAY", "PAUSE_LARGE_BANNER", "video-pause");
 });
 
 video.addEventListener('play', () => {
@@ -311,9 +311,9 @@ const sdk = new AdSDK({
 });
 
 // Hiển thị banner ở nhiều vị trí
-sdk.start("header-banner", "DISPLAY", "LARGE_BANNER", "header");
-sdk.start("sidebar-banner", "DISPLAY", "MEDIUM_BANNER", "sidebar");
-sdk.start("footer-banner", "DISPLAY", "LARGE_BANNER", "footer");
+sdk.start("header-banner", "DISPLAY", "HOMEPAGE_LARGE_BANNER", "header");
+sdk.start("sidebar-banner", "DISPLAY", "SUBPAGE_BANNER", "sidebar");
+sdk.start("footer-banner", "DISPLAY", "HOMEPAGE_LARGE_BANNER", "footer");
 
 // Xóa một banner cụ thể
 setTimeout(() => {
