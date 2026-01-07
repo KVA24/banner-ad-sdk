@@ -349,7 +349,7 @@
       addLog('⏸️ Video paused - Đang tải overlay banner...');
       
       // Show overlay ad with callback
-      window.sdk.start("video-ad-slot", "OVERLAY", "PAUSE_LARGE_BANNER", (result) => {
+      window.sdk.start("video-ad-slot", "OVERLAY", "PAUSE_BANNER", (result) => {
         console.log('📦 Video Ad Callback:', result);
         
         if (result.status === 'success') {

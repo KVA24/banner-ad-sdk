@@ -82,7 +82,7 @@ sdk.start(domId, bannerType, adSize, positionId)
 |---------|------|----------|-------|
 | `domId` | String/Element | Có* | ID của element hoặc DOM element (*không bắt buộc với Welcome ads) |
 | `bannerType` | String | Có | Loại banner: `"DISPLAY"` hoặc `"OVERLAY"` |
-| `adSize` | String | Có | Kích thước: `"MINI_BANNER"`, `"SUBPAGE_BANNER"`, `"HOMEPAGE_LARGE_BANNER"`, `"PAUSE_LARGE_BANNER"` |
+| `adSize` | String | Có | Kích thước: `"MINI_BANNER"`, `"SUBPAGE_BANNER"`, `"HOMEPAGE_LARGE_BANNER"`, `"PAUSE_BANNER"` |
 | `positionId` | String | Có | ID vị trí quảng cáo |
 
 **Ví dụ:**
@@ -213,7 +213,7 @@ AdSDK.AD_SIZE = {
   MINI_BANNER: "MINI_BANNER",
   SUBPAGE_BANNER: "SUBPAGE_BANNER",
   HOMEPAGE_LARGE_BANNER: "HOMEPAGE_LARGE_BANNER",
-  PAUSE_LARGE_BANNER: "PAUSE_LARGE_BANNER"
+  PAUSE_BANNER: "PAUSE_BANNER"
 }
 ```
 
@@ -266,7 +266,7 @@ const sdk = new AdSDK({
 });
 
 video.addEventListener('pause', () => {
-  sdk.start("video-overlay", "OVERLAY", "PAUSE_LARGE_BANNER", "video-pause");
+  sdk.start("video-overlay", "OVERLAY", "PAUSE_BANNER", "video-pause");
 });
 
 video.addEventListener('play', () => {
