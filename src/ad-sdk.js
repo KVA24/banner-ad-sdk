@@ -405,7 +405,7 @@ export default class AdSDK {
         this._welcomeSlotId = null;
       }
       
-      if (this._renderTimeouts?.[domId]) {
+      if (this._renderTimeouts && this._renderTimeouts[domId]) {
         clearTimeout(this._renderTimeouts[domId]);
         delete this._renderTimeouts[domId];
       }
@@ -794,7 +794,7 @@ export default class AdSDK {
       
       this.emit("rendered", {domId, ad});
       this._startSkipCountdown(token, domId, ad, isWelcome);
-      this._track("impression", ad.trackingEvents?.impression);
+      this._track("impression", ad.trackingEvents && ad.trackingEvents.impression);
       
       // NEW: Execute callback on successful render
       this._executeCallback(domId, 'success', ad);
@@ -905,7 +905,7 @@ export default class AdSDK {
         
         this.emit("rendered", {domId, ad});
         this._startSkipCountdown(token, domId, ad, isWelcome);
-        this._track("impression", ad.trackingEvents?.impression);
+        this._track("impression", ad.trackingEvents && ad.trackingEvents.impression);
         
         // NEW: Execute callback on successful render
         this._executeCallback(domId, 'success', ad);
