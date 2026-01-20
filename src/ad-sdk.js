@@ -87,7 +87,7 @@ export default class AdSDK {
       + `&gd=${baseCfg.gender || "NONE"}`
       + `&sm=${baseCfg.segments || ""}`;
     
-    this.cfg = {...baseCfg, fetchUrl};
+    this.cfg = Object.assign({}, baseCfg, {fetchUrl: fetchUrl});
     
     // Internal state
     this._handlers = {};
@@ -158,7 +158,7 @@ export default class AdSDK {
     const hash = md5(raw).toString();
     const sign = salt + hash;
     
-    if (this.cfg?.debug) {
+    if (this.cfg && this.cfg.debug) {
       console.groupCollapsed("[AdSDK] Sign Generation");
       console.log("positionId:", positionId);
       console.log("tenantId:", tenantId);
@@ -193,7 +193,7 @@ export default class AdSDK {
           throw new Error('stale_fetch');
         }
         
-        if (bannerType === "OVERLAY" && json?.delayOffSet !== undefined) {
+        if (bannerType === "OVERLAY" && json && json.delayOffSet !== undefined) {
           this._overlayDelayInfo[domId] = {
             lastRequestTime: now(),
             delayOffSet: json.delayOffSet * 1000
@@ -234,7 +234,9 @@ export default class AdSDK {
   }
   
   // NEW: Execute callback with result
-  _executeCallback(domId, status, data = null, error = null) {
+  _executeCallback(domId, status, data, error) {
+    if (typeof data === 'undefined') data = null;
+    if (typeof error === 'undefined') error = null;
     const callback = this._callbacks[domId];
     if (callback && typeof callback === 'function') {
       try {
@@ -393,7 +395,7 @@ export default class AdSDK {
   
   dismiss(domId) {
     const wrapper = document.getElementById(domId);
-    const layer = wrapper?.querySelector(".ad-click-layer-" + domId);
+    const layer = wrapper && wrapper.querySelector(".ad-click-layer-" + domId);
     if (layer) layer.remove();
     
     if (domId) {
@@ -410,12 +412,12 @@ export default class AdSDK {
         delete this._renderTimeouts[domId];
       }
       
-      if (this._iframeListeners?.[domId]) {
+      if (this._iframeListeners && this._iframeListeners[domId]) {
         window.removeEventListener("message", this._iframeListeners[domId]);
         delete this._iframeListeners[domId];
       }
       
-      if (this._iframeCleanups?.[domId]) {
+      if (this._iframeCleanups && this._iframeCleanups[domId]) {
         try {
           this._iframeCleanups[domId]();
         } catch (e) {
@@ -423,7 +425,7 @@ export default class AdSDK {
         delete this._iframeCleanups[domId];
       }
       
-      if (this._imgCleanups?.[domId]) {
+      if (this._imgCleanups && this._imgCleanups[domId]) {
         try {
           this._imgCleanups[domId]();
         } catch (e) {
@@ -431,7 +433,7 @@ export default class AdSDK {
         delete this._imgCleanups[domId];
       }
       
-      if (this._skipTimers?.[domId]) {
+      if (this._skipTimers && this._skipTimers[domId]) {
         clearTimeout(this._skipTimers[domId]);
         delete this._skipTimers[domId];
       }
@@ -556,7 +558,7 @@ export default class AdSDK {
   }
   
   _startSkipCountdown(token, domId, ad, isWelcome) {
-    if (this._skipTimers?.[domId]) {
+    if (this._skipTimers && this._skipTimers[domId]) {
       clearTimeout(this._skipTimers[domId]);
       this._skipTimers[domId] = null;
     }
@@ -572,20 +574,20 @@ export default class AdSDK {
         countdownText = document.createElement("div");
         countdownText.className = "skip-countdown-text";
         countdownText.textContent = `Bỏ qua sau ${skipTime} giây`;
-        Object.assign(countdownText.style, {
-          position: "absolute",
-          bottom: "10px",
-          right: "10px",
-          background: "rgba(0,0,0,0.7)",
-          color: "#ffffff",
-          padding: "8px 12px",
-          borderRadius: "4px",
-          fontSize: "14px",
-          fontWeight: "500",
-          zIndex: "1000001",
-          pointerEvents: "none",
-          transition: "opacity 0.3s ease"
-        });
+        
+        countdownText.style.position = "absolute";
+        countdownText.style.bottom = "10px";
+        countdownText.style.right = "10px";
+        countdownText.style.background = "rgba(0,0,0,0.7)";
+        countdownText.style.color = "#ffffff";
+        countdownText.style.padding = "8px 12px";
+        countdownText.style.borderRadius = "4px";
+        countdownText.style.fontSize = "14px";
+        countdownText.style.fontWeight = "500";
+        countdownText.style.zIndex = "1000001";
+        countdownText.style.pointerEvents = "none";
+        countdownText.style.transition = "opacity 0.3s ease";
+        
         container.appendChild(countdownText);
         
         let remainingTime = skipTime;
@@ -619,7 +621,7 @@ export default class AdSDK {
     this._skipTimers[domId] = setTimeout(() => {
       if (token !== this._startTokens[domId]) return;
       
-      if (document.getElementById(domId)?.querySelector('.banner-close-btn')) {
+      if (ocument.getElementById(domId) && document.getElementById(domId).querySelector('.banner-close-btn')) {
         document.getElementById(domId).querySelector('.banner-close-btn').style.opacity = "1";
         document.getElementById(domId).querySelector('.banner-close-btn').style.pointerEvents = "auto";
       }
@@ -659,27 +661,25 @@ export default class AdSDK {
       const buttonSkip = document.createElement("button");
       buttonSkip.className = "banner-close-btn";
       buttonSkip.innerHTML = "✕";
-      Object.assign(buttonSkip.style, {
-        position: "absolute",
-        top: "-16px",
-        right: "-16px",
-        width: "32px",
-        height: "32px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "pointer",
-        fontSize: "20px",
-        border: "none",
-        boxShadow: "0px 0px 6.4px 0px #00000080",
-        borderRadius: "50%",
-        background: "#ffffff",
-        color: "#000000",
-        zIndex: "1000000",
-        opacity: "0",
-        transition: "opacity .3s ease",
-        pointerEvents: "none",
-      });
+      buttonSkip.style.position = "absolute";
+      buttonSkip.style.top = "-16px";
+      buttonSkip.style.right = "-16px";
+      buttonSkip.style.width = "32px";
+      buttonSkip.style.height = "32px";
+      buttonSkip.style.display = "flex";
+      buttonSkip.style.alignItems = "center";
+      buttonSkip.style.justifyContent = "center";
+      buttonSkip.style.cursor = "pointer";
+      buttonSkip.style.fontSize = "20px";
+      buttonSkip.style.border = "none";
+      buttonSkip.style.boxShadow = "0px 0px 6.4px 0px #00000080";
+      buttonSkip.style.borderRadius = "50%";
+      buttonSkip.style.background = "#ffffff";
+      buttonSkip.style.color = "#000000";
+      buttonSkip.style.zIndex = "1000000";
+      buttonSkip.style.opacity = "0";
+      buttonSkip.style.transition = "opacity .3s ease";
+      buttonSkip.style.pointerEvents = "none";
       container.appendChild(buttonSkip);
       
       if (isWelcome) {
@@ -688,7 +688,7 @@ export default class AdSDK {
       
       buttonSkip.addEventListener("click", () => {
         this.emit("skip", {domId: domId, ad});
-        this._track("skip", ad.trackingEvents?.skip);
+        this._track("skip", ad.trackingEvents && ad.trackingEvents.skip);
         buttonSkip.style.opacity = "0";
         buttonSkip.style.pointerEvents = "none";
         
@@ -803,7 +803,7 @@ export default class AdSDK {
     img.onerror = () => {
       console.error("[AdSDK] Image load error:", img.src);
       if (token !== this._startTokens[domId]) return;
-      this._track("error", ad.trackingEvents?.error);
+      this._track("error", ad.trackingEvents && ad.trackingEvents.error);
       const error = new Error(`Image load error: ${img.src}`);
       this.emit("error", {domId, err: error});
       this._handleRenderError(domId, isWelcome);
@@ -921,7 +921,7 @@ export default class AdSDK {
         hasRendered: hasRendered,
         isWelcome: isWelcome,
         welcomeDomExists: !!this._welcomeDom,
-        welcomeDomOpacity: this._welcomeDom?.style.opacity
+        welcomeDomOpacity: this._welcomeDom && this._welcomeDom.style.opacity
       });
       
       if (token !== this._startTokens[domId]) return;
@@ -934,7 +934,7 @@ export default class AdSDK {
       if (!alreadyRendered) {
         console.error('[AdSDK] ❌ Iframe render timeout - no message received for domId:', domId, 'isWelcome:', isWelcome);
         const error = new Error('Iframe render timeout');
-        this._track("error", ad.trackingEvents?.error);
+        this._track("error", ad.trackingEvents && ad.trackingEvents.error);
         this.emit("error", {domId, err: error});
         this._handleRenderError(domId, isWelcome);
         
@@ -1000,14 +1000,13 @@ export default class AdSDK {
     const xml = parser.parseFromString(xmlText, "text/xml");
     
     const linear = xml.querySelector("Linear");
-    const skipOffsetAttr = linear?.getAttribute("skipoffset");
+    const skipOffsetAttr = linear && linear.getAttribute("skipoffset");
     const skipOffsetSec = skipOffsetAttr
       ? this._vastTimeToSeconds(skipOffsetAttr)
       : null;
     const skippable = skipOffsetAttr !== null;
     
-    const mediaFile = xml.querySelector("MediaFile[type='video/mp4'], MediaFile")
-      ?.textContent?.trim();
+    const mediaFile = xml.querySelector("MediaFile[type='video/mp4'], MediaFile").textContent.trim();
     if (!mediaFile) throw new Error("No MediaFile found in VAST");
     
     const video = document.createElement("video");
@@ -1020,7 +1019,7 @@ export default class AdSDK {
     video.style.height = "100%";
     video.style.background = "#000";
     
-    const clickThrough = xml.querySelector("ClickThrough")?.textContent?.trim();
+    const clickThrough = xml.querySelector("ClickThrough").textContent.trim();
     if (clickThrough) {
       video.style.cursor = "pointer";
       video.addEventListener("click", () => {
@@ -1031,12 +1030,10 @@ export default class AdSDK {
     }
     
     const wrapper = document.createElement("div");
-    Object.assign(wrapper.style, {
-      position: "relative",
-      width: "100%",
-      height: "100%",
-      overflow: "hidden",
-    });
+    wrapper.style.position = "relative";
+    wrapper.style.width = "100%";
+    wrapper.style.height = "100%";
+    wrapper.style.overflow = "hidden";
     wrapper.appendChild(video);
     
     const container = this._containers[domId];
@@ -1048,35 +1045,31 @@ export default class AdSDK {
     container.appendChild(wrapper);
     
     const skipBtn = document.createElement("div");
-    Object.assign(skipBtn.style, {
-      position: "absolute",
-      bottom: "20px",
-      right: "20px",
-      background: "rgba(0,0,0,0.7)",
-      color: "#fff",
-      fontSize: "14px",
-      padding: "8px 16px",
-      borderRadius: "4px",
-      cursor: "default",
-      opacity: "0",
-      transition: "opacity 0.3s",
-    });
+    skipBtn.style.position = "absolute";
+    skipBtn.style.bottom = "20px";
+    skipBtn.style.right = "20px";
+    skipBtn.style.background = "rgba(0,0,0,0.7)";
+    skipBtn.style.color = "#fff";
+    skipBtn.style.fontSize = "14px";
+    skipBtn.style.padding = "8px 16px";
+    skipBtn.style.borderRadius = "4px";
+    skipBtn.style.cursor = "default";
+    skipBtn.style.opacity = "0";
+    skipBtn.style.transition = "opacity 0.3s";
     wrapper.appendChild(skipBtn);
     
     const muteBtn = document.createElement("div");
-    Object.assign(muteBtn.style, {
-      position: "absolute",
-      bottom: "20px",
-      left: "20px",
-      background: "rgba(0,0,0,0.6)",
-      color: "#fff",
-      fontSize: "16px",
-      padding: "6px 10px",
-      borderRadius: "50%",
-      cursor: "pointer",
-      opacity: "0.8",
-      userSelect: "none",
-    });
+    muteBtn.style.position = "absolute";
+    muteBtn.style.bottom = "20px";
+    muteBtn.style.left = "20px";
+    muteBtn.style.background = "rgba(0,0,0,0.6)";
+    muteBtn.style.color = "#fff";
+    muteBtn.style.fontSize = "16px";
+    muteBtn.style.padding = "6px 10px";
+    muteBtn.style.borderRadius = "50%";
+    muteBtn.style.cursor = "pointer";
+    muteBtn.style.opacity = "0.8";
+    muteBtn.style.userSelect = "none";
     muteBtn.textContent = "🔇";
     wrapper.appendChild(muteBtn);
     
@@ -1088,7 +1081,7 @@ export default class AdSDK {
     muteBtn.addEventListener("click", onMuteToggle);
     
     if (skippable) {
-      const allowSkipAfter = skipOffsetSec ?? 5;
+      const allowSkipAfter = skipOffsetSec !== null && skipOffsetSec !== undefined ? skipOffsetSec : 5;
       let remaining = allowSkipAfter;
       skipBtn.textContent = `Skip in ${remaining}s`;
       skipBtn.style.opacity = "1";
@@ -1190,17 +1183,15 @@ export default class AdSDK {
   _createWelcomeDom() {
     const id = `ad-welcome-${Math.random().toString(36).slice(2, 7)}`;
     const el = document.createElement("div");
-    Object.assign(el.style, {
-      position: "fixed",
-      inset: "0",
-      zIndex: "999999",
-      background: "rgba(0,0,0,0.85)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      width: "100vw",
-      height: "100vh",
-    });
+    el.style.position = "fixed";
+    el.style.inset = "0";
+    el.style.zIndex = "999999";
+    el.style.background = "rgba(0,0,0,0.85)";
+    el.style.display = "flex";
+    el.style.alignItems = "center";
+    el.style.justifyContent = "center";
+    el.style.width = "100vw";
+    el.style.height = "100vh";
     el.id = id;
     el.style.opacity = "0";
     el.style.transition = "opacity 0.4s ease";
@@ -1210,17 +1201,15 @@ export default class AdSDK {
     const slotId = `welcome-slot-${Math.random().toString(36).slice(2, 7)}`;
     const slot = document.createElement("div");
     slot.id = slotId;
-    Object.assign(slot.style, {
-      width: "600px",
-      height: "500px",
-      maxWidth: "100vw",
-      maxHeight: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      position: "relative",
-      overflow: "visible",
-    });
+    slot.style.width = "600px";
+    slot.style.height = "500px";
+    slot.style.maxWidth = "100vw";
+    slot.style.maxHeight = "100vh";
+    slot.style.display = "flex";
+    slot.style.alignItems = "center";
+    slot.style.justifyContent = "center";
+    slot.style.position = "relative";
+    slot.style.overflow = "visible";
     el.appendChild(slot);
     
     this._domEls[slotId] = slot;
@@ -1230,33 +1219,31 @@ export default class AdSDK {
     
     const closeBtn = document.createElement("div");
     closeBtn.innerText = "✕";
-    Object.assign(closeBtn.style, {
-      position: "absolute",
-      top: "-16px",
-      right: "-16px",
-      width: "32px",
-      height: "32px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      cursor: "pointer",
-      fontSize: "20px",
-      boxShadow: "0px 0px 6.4px 0px #00000080",
-      borderRadius: "50%",
-      background: "#ffffff",
-      color: "#000000",
-      zIndex: "1000000",
-      opacity: "0",
-      transition: "opacity .3s ease",
-      pointerEvents: "none",
-    });
+    closeBtn.style.position = "absolute";
+    closeBtn.style.top = "-16px";
+    closeBtn.style.right = "-16px";
+    closeBtn.style.width = "32px";
+    closeBtn.style.height = "32px";
+    closeBtn.style.display = "flex";
+    closeBtn.style.alignItems = "center";
+    closeBtn.style.justifyContent = "center";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.style.fontSize = "20px";
+    closeBtn.style.boxShadow = "0px 0px 6.4px 0px #00000080";
+    closeBtn.style.borderRadius = "50%";
+    closeBtn.style.background = "#ffffff";
+    closeBtn.style.color = "#000000";
+    closeBtn.style.zIndex = "1000000";
+    closeBtn.style.opacity = "0";
+    closeBtn.style.transition = "opacity .3s ease";
+    closeBtn.style.pointerEvents = "none";
     
     slot.appendChild(closeBtn);
     
     this._welcomeCloseBtn = closeBtn;
     
     closeBtn.addEventListener("click", () => {
-      this._track("skip", this._adData[slotId]?.trackingEvents?.skip);
+      this._track("skip", this._adData[slotId] && this._adData[slotId].trackingEvents && this._adData[slotId].trackingEvents.skip);
       el.style.opacity = "0";
       setTimeout(() => {
         el.remove();
