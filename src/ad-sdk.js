@@ -1,6 +1,9 @@
 // src/ad-sdk.fixed.js
 // Ad SDK – patched: support multi-slot, per-slot tokens, per-slot cleanup, single proper listener handling, no double-src
 // UPDATED: Added callback support for start() method
+import 'core-js/stable';
+import 'regenerator-runtime/runtime';
+
 import md5 from "crypto-js/md5";
 
 // ---- Utils ----
