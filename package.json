@@ -34,6 +34,8 @@
   },
   "dependencies": {
     "crypto-js": "^4.2.0",
-    "regenerator-runtime": "^0.14.1"
+    "es6-promise": "^4.2.8",
+    "regenerator-runtime": "^0.14.1",
+    "whatwg-fetch": "^3.6.20"
   }
 }
