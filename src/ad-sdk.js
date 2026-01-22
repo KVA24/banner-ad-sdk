@@ -32,7 +32,7 @@ var extend = function(dest) {
 };
 
 // ---- Main SDK ----
-export default function AdSDK(cfg) {
+function AdSDK(cfg) {
   if (cfg === void 0) cfg = {};
   
   // Environment presets
@@ -1395,3 +1395,5 @@ if (typeof window !== "undefined" && window.SDK_INIT && typeof window.SDK_INIT =
   window.sdk = new AdSDK(window.SDK_INIT);
   if (window.SDK_INIT.domId) window.sdk.start(window.SDK_INIT.domId);
 }
+
+export default AdSDK;

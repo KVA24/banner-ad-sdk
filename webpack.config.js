@@ -1,122 +1,62 @@
 const path = require('path');
-const TerserPlugin = require('terser-webpack-plugin');
 
 module.exports = {
   mode: 'production',
   entry: path.resolve(__dirname, 'src', 'ad-sdk.js'),
+  
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'ad-sdk.min.js',
-    library: 'AdSDK',
-    libraryTarget: 'umd',
-    libraryExport: "default",
-    globalObject: "typeof self !== 'undefined' ? self : this",
-    umdNamedDefine: true
+    library: { name: 'AdSDK', type: 'umd', export: 'default'},
+    globalObject: 'this',
+    
+    environment: {
+      arrowFunction: false,
+      const: false,
+      destructuring: false,
+      forOf: false,
+      module: false,
+    },
   },
-  devtool: false,
+  
+  target: ['web', 'es5'],
+  
   module: {
     rules: [
       {
         test: /\.js$/,
-        exclude: /(node_modules)/,
+        exclude: /node_modules\/(core-js|regenerator-runtime)\//,
         use: {
           loader: 'babel-loader',
           options: {
+            babelrc: false,
+            configFile: false,
             presets: [
-              ['@babel/preset-env', {
-                targets: {
-                  browsers: ['chrome 38', 'ie 11']
+              [
+                '@babel/preset-env',
+                {
+                  targets: { chrome: '38', safari: '7', ie: '11' },
+                  useBuiltIns: 'usage',
+                  corejs: 3,
+                  forceAllTransforms: true,
+                  modules: 'commonjs',
                 },
-                useBuiltIns: 'usage',
-                corejs: 3,
-                modules: false,
-                bugfixes: true,
-                // Debug: log transformations
-                debug: false
-              }]
+              ],
             ],
             plugins: [
-              ['@babel/plugin-transform-runtime', {
-                corejs: false,
-                helpers: true,
-                regenerator: true,
-                useESModules: false
-              }],
-              '@babel/plugin-proposal-optional-chaining',
-              '@babel/plugin-proposal-nullish-coalescing-operator',
-              '@babel/plugin-proposal-object-rest-spread'
+              '@babel/plugin-transform-class-properties',
+              '@babel/plugin-transform-private-methods',
+              '@babel/plugin-transform-private-property-in-object',
             ],
-            comments: false,
-          }
-        }
-      }
-    ]
+          },
+        },
+      },
+    ],
   },
+  
   optimization: {
     minimize: true,
-    minimizer: [
-      new TerserPlugin({
-        terserOptions: {
-          ecma: 5,
-          compress: {
-            drop_console: true,
-            passes: 2,
-            // Safe compression settings
-            arrows: false,
-            collapse_vars: false,
-            comparisons: true,
-            computed_props: false,
-            hoist_funs: false,
-            hoist_props: false,
-            hoist_vars: false,
-            inline: false,
-            loops: false,
-            negate_iife: false,
-            properties: false,
-            reduce_funcs: false,
-            reduce_vars: false,
-            switches: false,
-            toplevel: false,
-            typeofs: false,
-            booleans: true,
-            if_return: true,
-            sequences: true,
-            unused: true,
-            conditionals: true,
-            dead_code: true,
-            evaluate: true,
-            join_vars: true,
-            keep_fnames: false,
-            pure_getters: true
-          },
-          mangle: {
-            reserved: ['AdSDK'],
-            keep_classnames: true,
-            keep_fnames: false
-          },
-          format: {
-            comments: false,
-            ecma: 5,
-            ascii_only: true,
-            beautify: false
-          },
-          ie8: true,
-          safari10: true
-        },
-        extractComments: false
-      })
-    ]
   },
-  plugins: [
-    // NO OBFUSCATION - để test trước
-  ],
-  resolve: {
-    extensions: ['.js']
-  },
-  // Performance hints
-  performance: {
-    hints: 'warning',
-    maxEntrypointSize: 512000,
-    maxAssetSize: 512000
-  }
+  
+  devtool: false,
 };
